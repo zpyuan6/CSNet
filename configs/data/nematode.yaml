@@ -1,0 +1,13 @@
+path: F:\nematoda\AgriNema\YOLO_Neme_Seg_28JAN26
+train: images/train
+val: images/val
+
+nc: 6
+
+names:
+  0: Meloidogyne hapla
+  1: PCN Cyst
+  2: Globodera pallida
+  3: Pratylenchus
+  4: Ditylenchus
+  5: PCN

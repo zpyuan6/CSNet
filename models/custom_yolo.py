@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from .layers import CustomC2f, CustomSPPF, CustomDetect
+from modules import DeformableCapsBlock
 
 
 CUSTOM_MODULES = {
     "CustomC2f": CustomC2f,
     "CustomSPPF": CustomSPPF,
     "CustomDetect": CustomDetect,
+    "DeformableCapsBlock": DeformableCapsBlock,
 }
 
 
