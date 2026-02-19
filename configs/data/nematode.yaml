@@ -1,4 +1,5 @@
-path: F:\nematoda\AgriNema\YOLO_Neme_Seg_28JAN26
+# path: F:\nematoda\AgriNema\YOLO_Neme_Seg_28JAN26
+path: C:\Datasets\Yolo_11Dec
 train: images/train
 val: images/val
 
