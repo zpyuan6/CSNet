@@ -321,6 +321,31 @@ class CapsRoute(nn.Module):
         return routed
 
 
+class CapsRoutev2(CapsRoute):
+    """CapsRoute with stronger post-routing intra-type aggregation.
+
+    v2 keeps the same routing path as ``CapsRoute`` and replaces the final
+    grouped Conv aggregation with a lightweight grouped C3k2 block, i.e.
+    capsule-style equivalent of YOLO's ``concat -> C3k2`` refinement.
+    """
+
+    def __init__(
+        self,
+        K_in: Union[List[int], Tuple[int, ...]],
+        P_in: Union[List[int], Tuple[int, ...]],
+        K_out: int,
+        P_out: int,
+        kernel_size: int = 3,
+        pre_k: int = 3,
+        post_k: int = 3,
+        pre_groups: Optional[int] = None,
+        post_groups: Optional[int] = None,
+    ):
+        super().__init__(K_in, P_in, K_out, P_out, kernel_size, pre_k, post_k, pre_groups, post_groups)
+        _ = (post_k, post_groups)  # kept for YAML/API compatibility
+        self.spagg = C3k2(self.c_out, self.c_out, n=1, c3k=False, e=0.5, g=self.K_out, shortcut=True)
+
+
 # -------------------------
 # 4) CapsDecode
 # -------------------------

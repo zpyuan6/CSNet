@@ -788,4 +788,468 @@ class CapsuleDetect(Detect):
         boxes = torch.cat(box_list, dim=-1)
         scores = torch.cat(cls_list, dim=-1)
         return dict(boxes=boxes, scores=scores, feats=x)
+    
+
+class CapsuleDetectv1(Detect):
+    """Capsule Detect variant with activation-gated pose fusion.
+
+    Per level:
+    1) Split packed capsule channels into pose/activation (interleaved by type).
+    2) Use a 2-layer 1x1 gate net on activation channels.
+    3) Gate pose channels with residual scaling.
+    4) Flatten to K*D channels and run original Detect cv2/cv3 heads.
+    """
+
+    def __init__(
+        self,
+        nc: int = 80,
+        *args,
+        reg_max: int = 16,
+        end2end: bool = False,
+        k: list[int] | tuple[int, ...] = (4, 8, 16),
+        d: list[int] | tuple[int, ...] = (16, 16, 16),
+        ch: tuple = (),
+    ):
+        parsed = list(args)
+        if parsed and isinstance(parsed[-1], (list, tuple)):
+            ch = tuple(parsed.pop(-1))
+
+        # Parser layout: [k_list, d_list, reg_max, end2end, ch]
+        if len(parsed) not in (2, 4):
+            raise ValueError("CapsuleDetectv1 expects [k_list, d_list, reg_max, end2end, ch].")
+
+        k, d = parsed[0], parsed[1]
+        if len(parsed) == 4:
+            reg_max = int(parsed[2])
+            end2end = bool(parsed[3])
+
+        if not isinstance(k, (list, tuple)) or not isinstance(d, (list, tuple)):
+            raise TypeError("CapsuleDetectv1 requires list/tuple k and d (per-level settings).")
+
+        ch = tuple(int(c) for c in ch)
+        nl = len(ch)
+        if len(k) != nl or len(d) != nl:
+            raise ValueError(f"CapsuleDetectv1 k/d length must equal number of levels ({nl}).")
+
+        self.k_list = tuple(int(v) for v in k)
+        self.d_list = tuple(int(v) for v in d)
+
+        # Input from neck is packed as K*(D+1): [pose(D), act(1)] repeated K types.
+        for i, c in enumerate(ch):
+            expected = self.k_list[i] * (self.d_list[i] + 1)
+            if c != expected:
+                raise ValueError(
+                    f"CapsuleDetectv1 level-{i} channel mismatch: got {c}, "
+                    f"expected {expected} from k={self.k_list[i]}, d={self.d_list[i]}."
+                )
+
+        # Detect heads consume merged pose channels: K*D.
+        merged_ch = tuple(k_i * d_i for k_i, d_i in zip(self.k_list, self.d_list))
+        super().__init__(nc=nc, reg_max=reg_max, end2end=end2end, ch=merged_ch)
+
+        self.pose_gates = nn.ModuleList()
+        self.gate_alpha = nn.ParameterList()
+        for k_i, d_i in zip(self.k_list, self.d_list):
+            out_ch = k_i * d_i
+            hidden = max(8, k_i * 2)
+            self.pose_gates.append(
+                nn.Sequential(
+                    nn.Conv2d(k_i, hidden, 1, bias=True),
+                    nn.SiLU(inplace=True),
+                    nn.Conv2d(hidden, out_ch, 1, bias=True),
+                )
+            )
+            self.gate_alpha.append(nn.Parameter(torch.tensor(0.5)))
+
+    def _split_pose_act(self, x: torch.Tensor, i: int) -> tuple[torch.Tensor, torch.Tensor]:
+        """Split one level packed tensor into pose and activation maps."""
+        k_i = self.k_list[i]
+        d_i = self.d_list[i]
+        b, c, h, w = x.shape
+        expected = k_i * (d_i + 1)
+        if c != expected:
+            raise ValueError(f"CapsuleDetectv1 level-{i} channel mismatch: got {c}, expected {expected}.")
+
+        caps = x.view(b, k_i, d_i + 1, h, w)
+        pose = caps[:, :, :d_i].reshape(b, k_i * d_i, h, w).contiguous()
+        act = caps[:, :, d_i].contiguous()
+        return pose, act
+
+    def _merge_pose(self, x: list[torch.Tensor]) -> list[torch.Tensor]:
+        merged = []
+        for i, xi in enumerate(x):
+            pose, act = self._split_pose_act(xi, i)
+            gate = torch.sigmoid(self.pose_gates[i](act))
+            # Residual gating keeps base pose information and improves stability.
+            pose = pose * (1.0 + self.gate_alpha[i] * gate)
+            merged.append(pose)
+        return merged
+
+    def forward_head(
+        self, x: list[torch.Tensor], box_head: torch.nn.Module = None, cls_head: torch.nn.Module = None
+    ) -> dict[str, torch.Tensor]:
+        if box_head is None or cls_head is None:
+            return dict()
+
+        pose_feats = self._merge_pose(x)
+        bs = pose_feats[0].shape[0]
+
+        box_list = [box_head[i](pose_feats[i]).view(bs, 4 * self.reg_max, -1) for i in range(self.nl)]
+        cls_list = [cls_head[i](pose_feats[i]).view(bs, self.nc, -1) for i in range(self.nl)]
+        boxes = torch.cat(box_list, dim=-1)
+        scores = torch.cat(cls_list, dim=-1)
+        return dict(boxes=boxes, scores=scores, feats=x)
+
+
+class CapsuleDetectv2(Detect):
+    """Capsule Detect v2: activation-gated pose + activation bypass for classification."""
+
+    def __init__(
+        self,
+        nc: int = 80,
+        *args,
+        reg_max: int = 16,
+        end2end: bool = False,
+        k: list[int] | tuple[int, ...] = (4, 8, 16),
+        d: list[int] | tuple[int, ...] = (16, 16, 16),
+        ch: tuple = (),
+    ):
+        parsed = list(args)
+        if parsed and isinstance(parsed[-1], (list, tuple)):
+            ch = tuple(parsed.pop(-1))
+
+        # Parser layout: [k_list, d_list, reg_max, end2end, ch]
+        if len(parsed) not in (2, 4):
+            raise ValueError("CapsuleDetectv2 expects [k_list, d_list, reg_max, end2end, ch].")
+
+        k, d = parsed[0], parsed[1]
+        if len(parsed) == 4:
+            reg_max = int(parsed[2])
+            end2end = bool(parsed[3])
+
+        if not isinstance(k, (list, tuple)) or not isinstance(d, (list, tuple)):
+            raise TypeError("CapsuleDetectv2 requires list/tuple k and d (per-level settings).")
+
+        ch = tuple(int(c) for c in ch)
+        nl = len(ch)
+        if len(k) != nl or len(d) != nl:
+            raise ValueError(f"CapsuleDetectv2 k/d length must equal number of levels ({nl}).")
+
+        self.k_list = tuple(int(v) for v in k)
+        self.d_list = tuple(int(v) for v in d)
+
+        # Input from neck is packed as K*(D+1): [pose(D), act(1)] repeated K types.
+        for i, c in enumerate(ch):
+            expected = self.k_list[i] * (self.d_list[i] + 1)
+            if c != expected:
+                raise ValueError(
+                    f"CapsuleDetectv2 level-{i} channel mismatch: got {c}, "
+                    f"expected {expected} from k={self.k_list[i]}, d={self.d_list[i]}."
+                )
+
+        # Detect heads consume merged pose channels: K*D.
+        merged_ch = tuple(k_i * d_i for k_i, d_i in zip(self.k_list, self.d_list))
+        super().__init__(nc=nc, reg_max=reg_max, end2end=end2end, ch=merged_ch)
+
+        self.pose_gates = nn.ModuleList()
+        self.gate_alpha = nn.ParameterList()
+        self.cls_bypass = nn.ModuleList()
+        self.cls_beta = nn.ParameterList()
+
+        for k_i, d_i in zip(self.k_list, self.d_list):
+            pose_ch = k_i * d_i
+            gate_hidden = max(8, k_i * 2)
+            self.pose_gates.append(
+                nn.Sequential(
+                    nn.Conv2d(k_i, gate_hidden, 1, bias=True),
+                    nn.SiLU(inplace=True),
+                    nn.Conv2d(gate_hidden, pose_ch, 1, bias=True),
+                )
+            )
+            self.gate_alpha.append(nn.Parameter(torch.tensor(0.5)))
+
+            cls_hidden = max(16, k_i * 2)
+            self.cls_bypass.append(
+                nn.Sequential(
+                    nn.Conv2d(k_i, cls_hidden, 1, bias=True),
+                    nn.SiLU(inplace=True),
+                    nn.Conv2d(cls_hidden, pose_ch, 1, bias=True),
+                )
+            )
+            self.cls_beta.append(nn.Parameter(torch.tensor(0.1)))
+
+    def _split_pose_act(self, x: torch.Tensor, i: int) -> tuple[torch.Tensor, torch.Tensor]:
+        """Split one level packed tensor into pose and activation maps."""
+        k_i = self.k_list[i]
+        d_i = self.d_list[i]
+        b, c, h, w = x.shape
+        expected = k_i * (d_i + 1)
+        if c != expected:
+            raise ValueError(f"CapsuleDetectv2 level-{i} channel mismatch: got {c}, expected {expected}.")
+
+        caps = x.view(b, k_i, d_i + 1, h, w)
+        pose = caps[:, :, :d_i].reshape(b, k_i * d_i, h, w).contiguous()
+        act = caps[:, :, d_i].contiguous()
+        return pose, act
+
+    def _fuse_pose(self, x: list[torch.Tensor]) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
+        box_feats, cls_feats = [], []
+        for i, xi in enumerate(x):
+            pose, act = self._split_pose_act(xi, i)
+            gate = torch.sigmoid(self.pose_gates[i](act))
+            pose_g = pose * (1.0 + self.gate_alpha[i] * gate)
+
+            # Classification bypass from activation channels.
+            act_skip = self.cls_bypass[i](act)
+            cls_in = pose_g + self.cls_beta[i] * act_skip
+
+            box_feats.append(pose_g)
+            cls_feats.append(cls_in)
+        return box_feats, cls_feats
+
+    def forward_head(
+        self, x: list[torch.Tensor], box_head: torch.nn.Module = None, cls_head: torch.nn.Module = None
+    ) -> dict[str, torch.Tensor]:
+        if box_head is None or cls_head is None:
+            return dict()
+
+        box_feats, cls_feats = self._fuse_pose(x)
+        bs = x[0].shape[0]
+
+        box_list = [box_head[i](box_feats[i]).view(bs, 4 * self.reg_max, -1) for i in range(self.nl)]
+        cls_list = [cls_head[i](cls_feats[i]).view(bs, self.nc, -1) for i in range(self.nl)]
+        boxes = torch.cat(box_list, dim=-1)
+        scores = torch.cat(cls_list, dim=-1)
+        return dict(boxes=boxes, scores=scores, feats=x)
+
+
+class CapsuleDetectv4(Detect):
+    """Capsule Detect v4: box uses raw pose, cls uses act bypass + symbolic type prior."""
+
+    def __init__(
+        self,
+        nc: int = 80,
+        *args,
+        reg_max: int = 16,
+        end2end: bool = False,
+        k: list[int] | tuple[int, ...] = (4, 8, 16),
+        d: list[int] | tuple[int, ...] = (16, 16, 16),
+        ch: tuple = (),
+    ):
+        parsed = list(args)
+        if parsed and isinstance(parsed[-1], (list, tuple)):
+            ch = tuple(parsed.pop(-1))
+
+        if len(parsed) not in (2, 4):
+            raise ValueError("CapsuleDetectv4 expects [k_list, d_list, reg_max, end2end, ch].")
+
+        k, d = parsed[0], parsed[1]
+        if len(parsed) == 4:
+            reg_max = int(parsed[2])
+            end2end = bool(parsed[3])
+
+        if not isinstance(k, (list, tuple)) or not isinstance(d, (list, tuple)):
+            raise TypeError("CapsuleDetectv4 requires list/tuple k and d (per-level settings).")
+
+        ch = tuple(int(c) for c in ch)
+        nl = len(ch)
+        if len(k) != nl or len(d) != nl:
+            raise ValueError(f"CapsuleDetectv4 k/d length must equal number of levels ({nl}).")
+
+        self.k_list = tuple(int(v) for v in k)
+        self.d_list = tuple(int(v) for v in d)
+
+        for i, c in enumerate(ch):
+            expected = self.k_list[i] * (self.d_list[i] + 1)
+            if c != expected:
+                raise ValueError(
+                    f"CapsuleDetectv4 level-{i} channel mismatch: got {c}, "
+                    f"expected {expected} from k={self.k_list[i]}, d={self.d_list[i]}."
+                )
+
+        merged_ch = tuple(k_i * d_i for k_i, d_i in zip(self.k_list, self.d_list))
+        super().__init__(nc=nc, reg_max=reg_max, end2end=end2end, ch=merged_ch)
+
+        self.cls_bypass = nn.ModuleList()
+        self.cls_beta = nn.ParameterList()
+        self.sym_prior = nn.ModuleList()
+        self.sym_beta = nn.ParameterList()
+
+        for k_i, d_i in zip(self.k_list, self.d_list):
+            pose_ch = k_i * d_i
+            cls_hidden = max(16, k_i * 2)
+            self.cls_bypass.append(
+                nn.Sequential(
+                    nn.Conv2d(k_i, cls_hidden, 1, bias=True),
+                    nn.SiLU(inplace=True),
+                    nn.Conv2d(cls_hidden, pose_ch, 1, bias=True),
+                )
+            )
+            self.cls_beta.append(nn.Parameter(torch.tensor(0.1)))
+            self.sym_prior.append(nn.Conv2d(k_i, self.nc, 1, bias=False))
+            self.sym_beta.append(nn.Parameter(torch.tensor(0.1)))
+
+    def _split_pose_act(self, x: torch.Tensor, i: int) -> tuple[torch.Tensor, torch.Tensor]:
+        k_i = self.k_list[i]
+        d_i = self.d_list[i]
+        b, c, h, w = x.shape
+        expected = k_i * (d_i + 1)
+        if c != expected:
+            raise ValueError(f"CapsuleDetectv4 level-{i} channel mismatch: got {c}, expected {expected}.")
+
+        caps = x.view(b, k_i, d_i + 1, h, w)
+        pose = caps[:, :, :d_i].reshape(b, k_i * d_i, h, w).contiguous()
+        act = caps[:, :, d_i].contiguous()
+        return pose, act
+
+    def _build_feats(self, x: list[torch.Tensor]) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
+        box_feats, cls_feats, cls_priors = [], [], []
+        for i, xi in enumerate(x):
+            pose, act = self._split_pose_act(xi, i)
+            cls_in = pose + self.cls_beta[i] * self.cls_bypass[i](act)
+            cls_prior = self.sym_beta[i] * self.sym_prior[i](act)
+            box_feats.append(pose)
+            cls_feats.append(cls_in)
+            cls_priors.append(cls_prior)
+        return box_feats, cls_feats, cls_priors
+
+    def forward_head(
+        self, x: list[torch.Tensor], box_head: torch.nn.Module = None, cls_head: torch.nn.Module = None
+    ) -> dict[str, torch.Tensor]:
+        if box_head is None or cls_head is None:
+            return dict()
+
+        box_feats, cls_feats, cls_priors = self._build_feats(x)
+        bs = x[0].shape[0]
+
+        box_list = [box_head[i](box_feats[i]).view(bs, 4 * self.reg_max, -1) for i in range(self.nl)]
+        cls_list = [
+            (cls_head[i](cls_feats[i]) + cls_priors[i]).view(bs, self.nc, -1)
+            for i in range(self.nl)
+        ]
+        boxes = torch.cat(box_list, dim=-1)
+        scores = torch.cat(cls_list, dim=-1)
+        return dict(boxes=boxes, scores=scores, feats=x)
+
+
+class CapsuleDetectv5(Detect):
+    """Capsule Detect v5: box uses raw pose, cls uses stabilized symbolic prior."""
+
+    def __init__(
+        self,
+        nc: int = 80,
+        *args,
+        reg_max: int = 16,
+        end2end: bool = False,
+        k: list[int] | tuple[int, ...] = (4, 8, 16),
+        d: list[int] | tuple[int, ...] = (16, 16, 16),
+        ch: tuple = (),
+    ):
+        parsed = list(args)
+        if parsed and isinstance(parsed[-1], (list, tuple)):
+            ch = tuple(parsed.pop(-1))
+
+        if len(parsed) not in (2, 4):
+            raise ValueError("CapsuleDetectv5 expects [k_list, d_list, reg_max, end2end, ch].")
+
+        k, d = parsed[0], parsed[1]
+        if len(parsed) == 4:
+            reg_max = int(parsed[2])
+            end2end = bool(parsed[3])
+
+        if not isinstance(k, (list, tuple)) or not isinstance(d, (list, tuple)):
+            raise TypeError("CapsuleDetectv5 requires list/tuple k and d (per-level settings).")
+
+        ch = tuple(int(c) for c in ch)
+        nl = len(ch)
+        if len(k) != nl or len(d) != nl:
+            raise ValueError(f"CapsuleDetectv5 k/d length must equal number of levels ({nl}).")
+
+        self.k_list = tuple(int(v) for v in k)
+        self.d_list = tuple(int(v) for v in d)
+
+        for i, c in enumerate(ch):
+            expected = self.k_list[i] * (self.d_list[i] + 1)
+            if c != expected:
+                raise ValueError(
+                    f"CapsuleDetectv5 level-{i} channel mismatch: got {c}, "
+                    f"expected {expected} from k={self.k_list[i]}, d={self.d_list[i]}."
+                )
+
+        merged_ch = tuple(k_i * d_i for k_i, d_i in zip(self.k_list, self.d_list))
+        super().__init__(nc=nc, reg_max=reg_max, end2end=end2end, ch=merged_ch)
+
+        self.cls_bypass = nn.ModuleList()
+        self.cls_beta = nn.ParameterList()
+        self.sym_prior = nn.ModuleList()
+        self.sym_norm = nn.ModuleList()
+        self.sym_dropout = nn.ModuleList()
+        self.sym_beta = nn.ParameterList()
+
+        for k_i, d_i in zip(self.k_list, self.d_list):
+            pose_ch = k_i * d_i
+            cls_hidden = max(16, k_i * 2)
+            self.cls_bypass.append(
+                nn.Sequential(
+                    nn.Conv2d(k_i, cls_hidden, 1, bias=True),
+                    nn.SiLU(inplace=True),
+                    nn.Conv2d(cls_hidden, pose_ch, 1, bias=True),
+                )
+            )
+            self.cls_beta.append(nn.Parameter(torch.tensor(0.1)))
+            self.sym_dropout.append(nn.Dropout2d(p=0.1))
+            self.sym_prior.append(nn.Conv2d(k_i, self.nc, 1, bias=False))
+            self.sym_norm.append(nn.GroupNorm(1, self.nc))
+            self.sym_beta.append(nn.Parameter(torch.tensor(0.1)))
+
+    def _split_pose_act(self, x: torch.Tensor, i: int) -> tuple[torch.Tensor, torch.Tensor]:
+        k_i = self.k_list[i]
+        d_i = self.d_list[i]
+        b, c, h, w = x.shape
+        expected = k_i * (d_i + 1)
+        if c != expected:
+            raise ValueError(f"CapsuleDetectv5 level-{i} channel mismatch: got {c}, expected {expected}.")
+
+        caps = x.view(b, k_i, d_i + 1, h, w)
+        pose = caps[:, :, :d_i].reshape(b, k_i * d_i, h, w).contiguous()
+        act = caps[:, :, d_i].contiguous()
+        return pose, act
+
+    def _build_feats(self, x: list[torch.Tensor]) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
+        box_feats, cls_feats, cls_priors = [], [], []
+        for i, xi in enumerate(x):
+            pose, act = self._split_pose_act(xi, i)
+            cls_scale = torch.tanh(self.cls_beta[i])
+            cls_in = pose + cls_scale * self.cls_bypass[i](act)
+
+            # Stabilized symbolic prior: dropout + normalization + per-location zero-mean.
+            act_s = self.sym_dropout[i](act)
+            prior = self.sym_prior[i](act_s)
+            prior = self.sym_norm[i](prior)
+            prior = prior - prior.mean(dim=1, keepdim=True)
+            sym_scale = torch.tanh(self.sym_beta[i])
+            cls_prior = sym_scale * prior
+
+            box_feats.append(pose)
+            cls_feats.append(cls_in)
+            cls_priors.append(cls_prior)
+        return box_feats, cls_feats, cls_priors
+
+    def forward_head(
+        self, x: list[torch.Tensor], box_head: torch.nn.Module = None, cls_head: torch.nn.Module = None
+    ) -> dict[str, torch.Tensor]:
+        if box_head is None or cls_head is None:
+            return dict()
+
+        box_feats, cls_feats, cls_priors = self._build_feats(x)
+        bs = x[0].shape[0]
+
+        box_list = [box_head[i](box_feats[i]).view(bs, 4 * self.reg_max, -1) for i in range(self.nl)]
+        cls_list = [
+            (cls_head[i](cls_feats[i]) + cls_priors[i]).view(bs, self.nc, -1)
+            for i in range(self.nl)
+        ]
+        boxes = torch.cat(box_list, dim=-1)
+        scores = torch.cat(cls_list, dim=-1)
+        return dict(boxes=boxes, scores=scores, feats=x)
 

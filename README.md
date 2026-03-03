@@ -30,3 +30,7 @@ python train_caps.py --model configs/model/yolo26_capsneck.yaml --data configs/d
 ```
 python train_caps.py --model configs/model/yolo26_capsneck.yaml --data configs/data/coco.yaml --epochs 50 --imgsz 640 --batch 64 --pretrained runs\detect\runs\train\CapsNeck_CoCo3\weights\best.pt --optimizer AdamW --lr0 5e-4 --lrf 0.001 --warmup_epochs 5 --name CapsNeck_CoCo
 ```
+
+```
+python train_caps.py --model configs/model/yolo26_capsneckhead_v2.yaml --data configs/data/coco.yaml --epochs 100 --imgsz 640 --batch 64 --pretrained runs\detect\runs\train\CapsNeckHead_CoCo\weights\best.pt --optimizer AdamW --warmup_epochs 5 --name CapsNeckHeadv1_CoCo
+```

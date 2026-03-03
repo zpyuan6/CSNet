@@ -71,15 +71,33 @@ from ultralytics.nn.modules import (
 from ultralytics.utils import LOGGER, colorstr
 from ultralytics.utils.ops import make_divisible
 
-from modules import CapsAlign, CapsDecode, CapsProj, CapsRoute, CapsuleDetect, CapsuleTap, DeformableCapsBlock
+from modules import (
+    CapsAlign,
+    CapsDecode,
+    CapsProj,
+    CapsRoute,
+    CapsRoutev2,
+    CapsuleDetect,
+    CapsuleDetectv1,
+    CapsuleDetectv2,
+    CapsuleDetectv4,
+    CapsuleDetectv5,
+    CapsuleTap,
+    DeformableCapsBlock,
+)
 
 
 CUSTOM_MODULES = {
     "DeformableCapsBlock": DeformableCapsBlock,
     "CapsuleDetect": CapsuleDetect,
+    "CapsuleDetectv1": CapsuleDetectv1,
+    "CapsuleDetectv2": CapsuleDetectv2,
+    "CapsuleDetectv4": CapsuleDetectv4,
+    "CapsuleDetectv5": CapsuleDetectv5,
     "CapsProj": CapsProj,
     "CapsAlign": CapsAlign,
     "CapsRoute": CapsRoute,
+    "CapsRoutev2": CapsRoutev2,
     "CapsDecode": CapsDecode,
     "CapsuleTap": CapsuleTap,
 }
@@ -172,6 +190,10 @@ def parse_model(d: dict[str, Any], ch: int, verbose: bool = True):
         {
             Detect,
             CapsuleDetect,
+            CapsuleDetectv1,
+            CapsuleDetectv2,
+            CapsuleDetectv4,
+            CapsuleDetectv5,
             WorldDetect,
             YOLOEDetect,
             Segment,
@@ -248,7 +270,7 @@ def parse_model(d: dict[str, Any], ch: int, verbose: bool = True):
             args = [c1, src_level, tgt_level, group_num]
             c2 = c1
 
-        elif m is CapsRoute:
+        elif m in {CapsRoute, CapsRoutev2}:
             num_src = len(f) if isinstance(f, (list, tuple)) else 1
 
             # Preferred YAML args:
@@ -275,7 +297,7 @@ def parse_model(d: dict[str, Any], ch: int, verbose: bool = True):
                 kernel_size, pre_k, post_k = 3, 3, 3
                 pre_groups_raw, post_groups_raw = 0, 0
             else:
-                raise ValueError('CapsRoute args must be [K_in,P_in,K_out,P_out,(kernel_size,pre_k,post_k,pre_groups,post_groups)] or legacy [P_in,(K_out,P_out)].')
+                raise ValueError('CapsRoute/CapsRoutev2 args must be [K_in,P_in,K_out,P_out,(kernel_size,pre_k,post_k,pre_groups,post_groups)] or legacy [P_in,(K_out,P_out)].')
 
             if isinstance(K_in_raw, (list, tuple)):
                 K_in_base = [int(v) for v in K_in_raw]
@@ -288,7 +310,7 @@ def parse_model(d: dict[str, Any], ch: int, verbose: bool = True):
                 P_in = [int(P_in_raw)] * num_src
 
             if len(K_in_base) != num_src or len(P_in) != num_src:
-                raise ValueError('CapsRoute K_in/P_in lists must match number of sources.')
+                raise ValueError('CapsRoute/CapsRoutev2 K_in/P_in lists must match number of sources.')
 
             # Width scaling follows Ultralytics scale.width behavior.
             K_in = [max(int(round(k * width)), 1) for k in K_in_base]
@@ -329,11 +351,11 @@ def parse_model(d: dict[str, Any], ch: int, verbose: bool = True):
         elif m is Concat:
             c2 = sum(ch[x] for x in f)
         elif m in detect_modules:
-            if m is CapsuleDetect:
+            if m in {CapsuleDetect, CapsuleDetectv1, CapsuleDetectv2, CapsuleDetectv4, CapsuleDetectv5}:
                 if len(args) < 3:
-                    raise ValueError('CapsuleDetect args must be [nc, k_list, d_list].')
+                    raise ValueError('CapsuleDetect/CapsuleDetectv1/CapsuleDetectv2/CapsuleDetectv4/CapsuleDetectv5 args must be [nc, k_list, d_list].')
                 if not isinstance(args[1], (list, tuple)) or not isinstance(args[2], (list, tuple)):
-                    raise TypeError('CapsuleDetect requires k_list and d_list in YAML.')
+                    raise TypeError('CapsuleDetect/CapsuleDetectv1/CapsuleDetectv2/CapsuleDetectv4/CapsuleDetectv5 requires k_list and d_list in YAML.')
                 # Width-scale capsule type counts per level; keep pose dims as provided.
                 args[1] = [max(int(round(int(v) * width)), 1) for v in args[1]]
                 args[2] = [int(v) for v in args[2]]
@@ -341,7 +363,23 @@ def parse_model(d: dict[str, Any], ch: int, verbose: bool = True):
             args.extend([reg_max, end2end, [ch[x] for x in f]])
             if m in {Segment, Segment26, YOLOESegment, YOLOESegment26}:
                 args[2] = make_divisible(min(args[2], max_channels) * width, 8)
-            if m in {Detect, CapsuleDetect, YOLOEDetect, Segment, Segment26, YOLOESegment, YOLOESegment26, Pose, Pose26, OBB, OBB26}:
+            if m in {
+                Detect,
+                CapsuleDetect,
+                CapsuleDetectv1,
+                CapsuleDetectv2,
+                CapsuleDetectv4,
+                CapsuleDetectv5,
+                YOLOEDetect,
+                Segment,
+                Segment26,
+                YOLOESegment,
+                YOLOESegment26,
+                Pose,
+                Pose26,
+                OBB,
+                OBB26,
+            }:
                 m.legacy = legacy
             c2 = ch[f[-1]] if isinstance(f, (list, tuple)) else ch[f]
 
@@ -368,7 +406,7 @@ def parse_model(d: dict[str, Any], ch: int, verbose: bool = True):
 
         m_ = nn.Sequential(*(m(*args) for _ in range(n))) if n > 1 else m(*args)
 
-        if m is CapsRoute:
+        if m in {CapsRoute, CapsRoutev2}:
             c2 = int(getattr(m_, "c_out", c2))
 
         t = str(m)[8:-2].replace("__main__.", "")

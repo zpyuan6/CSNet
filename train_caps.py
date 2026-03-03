@@ -49,12 +49,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Enable AMP (mixed precision).",
     )
 
-    # Two-stage freeze schedule: freeze backbone for first N epochs, then unfreeze.
+    # Optional two-stage freeze schedule.
+    parser.add_argument(
+        "--enable_freeze_pretrain",
+        action="store_true",
+        help="Enable two-stage training: freeze backbone first, then unfreeze.",
+    )
     parser.add_argument(
         "--freeze_backbone_epochs",
         type=int,
         default=10,
-        help="Freeze backbone for first N epochs. Set 0 to disable.",
+        help="Backbone frozen epochs when --enable_freeze_pretrain is set.",
     )
     parser.add_argument(
         "--freeze_backbone_layers",
@@ -66,6 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--project", default="runs/train")
     parser.add_argument("--name", default="yolo26_capsneck")
     parser.add_argument("--exist-ok", action="store_true")
+
     return parser
 
 
@@ -101,7 +107,7 @@ def main() -> None:
         exist_ok=args.exist_ok,
     )
 
-    freeze_epochs = max(0, min(args.freeze_backbone_epochs, args.epochs))
+    freeze_epochs = max(0, min(args.freeze_backbone_epochs, args.epochs)) if args.enable_freeze_pretrain else 0
     if freeze_epochs == 0:
         train(
             model_cfg=args.model,
