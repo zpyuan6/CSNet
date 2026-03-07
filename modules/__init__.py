@@ -7,7 +7,16 @@ from .backbone import (
     RoutingCaps,
     squash,
 )
-from .head import CapsuleDetect, CapsuleDetectv1, CapsuleDetectv2, CapsuleDetectv4, CapsuleDetectv5, CapsuleDualHead
+from .head import (
+    CapsuleDetect,
+    CapsuleDetectv1,
+    CapsuleDetectv2,
+    CapsuleDetectv4,
+    CapsuleDetectv5,
+    CapsuleDetectv6,
+    CapsuleDualHead,
+    CapsuleSegmentv1,
+)
 from .neck import CapsAlign, CapsDecode, CapsProj, CapsRoute, CapsRoutev2, CapsuleTap
 
 __all__ = [
@@ -23,6 +32,8 @@ __all__ = [
     "CapsuleDetectv2",
     "CapsuleDetectv4",
     "CapsuleDetectv5",
+    "CapsuleDetectv6",
+    "CapsuleSegmentv1",
     "CapsuleDualHead",
     "ConvBNAct",
     "DeformableCaps2d",

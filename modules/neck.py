@@ -322,12 +322,7 @@ class CapsRoute(nn.Module):
 
 
 class CapsRoutev2(CapsRoute):
-    """CapsRoute with stronger post-routing intra-type aggregation.
-
-    v2 keeps the same routing path as ``CapsRoute`` and replaces the final
-    grouped Conv aggregation with a lightweight grouped C3k2 block, i.e.
-    capsule-style equivalent of YOLO's ``concat -> C3k2`` refinement.
-    """
+    """CapsRoute with per-capsule pose refinement and act residual update."""
 
     def __init__(
         self,
@@ -342,8 +337,61 @@ class CapsRoutev2(CapsRoute):
         post_groups: Optional[int] = None,
     ):
         super().__init__(K_in, P_in, K_out, P_out, kernel_size, pre_k, post_k, pre_groups, post_groups)
-        _ = (post_k, post_groups)  # kept for YAML/API compatibility
-        self.spagg = C3k2(self.c_out, self.c_out, n=1, c3k=False, e=0.5, g=self.K_out, shortcut=True)
+        _ = (post_k, post_groups, pre_k, pre_groups)  # kept for YAML/API compatibility
+
+        deep_stage = self.K_out >= 64
+        pose_ch = self.K_out * self.P_out
+        # Match YOLO26 neck style:
+        # - shallow/mid stages: C3k2(n=2, c3k=True, attn=False)
+        # - deep stage:       C3k2(n=1, c3k=True, attn=True)
+        pose_e = 0.5 if (self.P_out % 2 == 0) else 1.0
+        self.pose_refine = C3k2(
+            pose_ch,
+            pose_ch,
+            n=1 if deep_stage else 2,
+            c3k=True,
+            e=pose_e,
+            attn=deep_stage,
+            g=self.K_out,
+            shortcut=True,
+        )
+        self.act_from_pose = Conv(pose_ch, self.K_out, 1, 1, g=self.K_out)
+        self.act_alpha = nn.Parameter(torch.tensor(0.1))
+
+    def forward(self, xs: Union[List[torch.Tensor], Tuple[torch.Tensor, ...]]) -> torch.Tensor:
+        if not isinstance(xs, (list, tuple)):
+            raise TypeError(f'CapsRoutev2 expects list/tuple inputs, got {type(xs)}')
+        if len(xs) != self.num_sources:
+            raise ValueError(f'CapsRoutev2 expected {self.num_sources} sources, got {len(xs)}')
+
+        h, w = int(xs[0].shape[-2]), int(xs[0].shape[-1])
+        cat_parts = []
+        for i, x in enumerate(xs):
+            expected_c = self.K_in_list[i] * (self.P_in_list[i] + 1)
+            if int(x.shape[1]) != expected_c:
+                raise ValueError(f'CapsRoutev2 source-{i} expected C={expected_c}, got C={int(x.shape[1])}')
+            if int(x.shape[-2]) != h or int(x.shape[-1]) != w:
+                raise ValueError('CapsRoutev2 inputs must share H,W. Use CapsAlign before routing.')
+            cat_parts.append(x)
+
+        x_cat = torch.cat(cat_parts, dim=1)  # [B, K_cat*(P+1), H, W]
+        routed = self.route1(self.conv_route(x_cat))  # [B, K_out*(P_out+1), H, W]
+
+        b, _, _, _ = routed.shape
+        # Packed layout by type: [pose(P), act(1)] repeated K times.
+        caps = routed.reshape(b, self.K_out, self.P_out + 1, h, w)
+        pose = caps[:, :, :self.P_out].contiguous()  # [B, K_out, P_out, H, W]
+        act = caps[:, :, self.P_out].contiguous()  # [B, K_out, H, W]
+
+        # Grouped pose refinement across type blocks (equivalent to per-type grouped processing).
+        pose_flat = pose.reshape(b, self.K_out * self.P_out, h, w)
+        pose_flat = self.pose_refine(pose_flat)
+        act_delta = self.act_from_pose(pose_flat)
+        act_final = act + act_delta
+
+        pose_pack = pose_flat.reshape(b, self.K_out, self.P_out, h, w)
+        out = torch.cat([pose_pack, act_final.unsqueeze(2)], dim=2).reshape(b, self.c_out, h, w)
+        return out
 
 
 # -------------------------

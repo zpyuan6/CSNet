@@ -8,6 +8,7 @@ from engine import train
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Train YOLO26 with capsule modules (head/neck)")
+    parser.add_argument("--task", default="", help="Optional Ultralytics task override, e.g. detect or segment.")
     parser.add_argument("--model", default="configs/model/yolo26_capsneck.yaml")
     parser.add_argument("--data", default="configs/data/coco.yaml")
     parser.add_argument("--epochs", type=int, default=100)
@@ -106,6 +107,8 @@ def main() -> None:
         project=args.project,
         exist_ok=args.exist_ok,
     )
+    if args.task:
+        common["task"] = args.task
 
     freeze_epochs = max(0, min(args.freeze_backbone_epochs, args.epochs)) if args.enable_freeze_pretrain else 0
     if freeze_epochs == 0:

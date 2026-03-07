@@ -7,7 +7,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ultralytics.nn.modules import Conv, DWConv, Detect
+from ultralytics.nn.modules import Conv, DWConv, Detect, Segment
+from ultralytics.nn.modules.block import Proto26
 
 
 class PrimaryCaps(nn.Module):
@@ -1132,6 +1133,118 @@ class CapsuleDetectv4(Detect):
         return dict(boxes=boxes, scores=scores, feats=x)
 
 
+def _setup_capsule_layout(
+    k: list[int] | tuple[int, ...],
+    d: list[int] | tuple[int, ...],
+    ch: tuple,
+    cls_name: str,
+) -> tuple[tuple[int, ...], tuple[int, ...], tuple[int, ...]]:
+    if not isinstance(k, (list, tuple)) or not isinstance(d, (list, tuple)):
+        raise TypeError(f"{cls_name} requires list/tuple k and d (per-level settings).")
+
+    ch = tuple(int(c) for c in ch)
+    nl = len(ch)
+    if len(k) != nl or len(d) != nl:
+        raise ValueError(f"{cls_name} k/d length must equal number of levels ({nl}).")
+
+    k_list = tuple(int(v) for v in k)
+    d_list = tuple(int(v) for v in d)
+    for i, c in enumerate(ch):
+        expected = k_list[i] * (d_list[i] + 1)
+        if c != expected:
+            raise ValueError(
+                f"{cls_name} level-{i} channel mismatch: got {c}, "
+                f"expected {expected} from k={k_list[i]}, d={d_list[i]}."
+            )
+    merged_ch = tuple(k_i * d_i for k_i, d_i in zip(k_list, d_list))
+    return k_list, d_list, merged_ch
+
+
+def _init_capsule_semantic_heads(obj: nn.Module) -> None:
+    obj.cls_bypass = nn.ModuleList()
+    obj.cls_beta = nn.ParameterList()
+    obj.sym_prior = nn.ModuleList()
+    obj.sym_norm = nn.ModuleList()
+    obj.sym_dropout = nn.ModuleList()
+    obj.sym_beta = nn.ParameterList()
+
+    for k_i, d_i in zip(obj.k_list, obj.d_list):
+        pose_ch = k_i * d_i
+        cls_hidden = max(16, k_i * 2)
+        obj.cls_bypass.append(
+            nn.Sequential(
+                nn.Conv2d(k_i, cls_hidden, 1, bias=True),
+                nn.SiLU(inplace=True),
+                nn.Conv2d(cls_hidden, pose_ch, 1, bias=True),
+            )
+        )
+        obj.cls_beta.append(nn.Parameter(torch.tensor(0.1)))
+        obj.sym_dropout.append(nn.Dropout2d(p=0.1))
+        obj.sym_prior.append(nn.Conv2d(k_i, obj.nc, 1, bias=False))
+        obj.sym_norm.append(nn.GroupNorm(1, obj.nc))
+        obj.sym_beta.append(nn.Parameter(torch.tensor(0.1)))
+
+
+def _capsule_split_pose_act(
+    x: torch.Tensor,
+    k_i: int,
+    d_i: int,
+    cls_name: str,
+    level_i: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    b, c, h, w = x.shape
+    expected = k_i * (d_i + 1)
+    if c != expected:
+        raise ValueError(f"{cls_name} level-{level_i} channel mismatch: got {c}, expected {expected}.")
+    caps = x.view(b, k_i, d_i + 1, h, w)
+    pose = caps[:, :, :d_i].reshape(b, k_i * d_i, h, w).contiguous()
+    act = caps[:, :, d_i].contiguous()
+    return pose, act
+
+
+def _capsule_build_feats(obj: nn.Module, x: list[torch.Tensor]) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
+    box_feats, cls_feats, cls_priors = [], [], []
+    cls_name = obj.__class__.__name__
+    for i, xi in enumerate(x):
+        pose, act = _capsule_split_pose_act(xi, obj.k_list[i], obj.d_list[i], cls_name, i)
+        cls_scale = torch.tanh(obj.cls_beta[i])
+        cls_in = pose + cls_scale * obj.cls_bypass[i](act)
+        act_s = obj.sym_dropout[i](act)
+        prior = obj.sym_prior[i](act_s)
+        prior = obj.sym_norm[i](prior)
+        prior = prior - prior.mean(dim=1, keepdim=True)
+        sym_scale = torch.tanh(obj.sym_beta[i])
+        cls_prior = sym_scale * prior
+        box_feats.append(pose)
+        cls_feats.append(cls_in)
+        cls_priors.append(cls_prior)
+    return box_feats, cls_feats, cls_priors
+
+
+def _capsule_build_feats_gated(
+    obj: nn.Module, x: list[torch.Tensor]
+) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
+    box_feats, cls_feats, cls_priors = [], [], []
+    cls_name = obj.__class__.__name__
+    for i, xi in enumerate(x):
+        pose, act = _capsule_split_pose_act(xi, obj.k_list[i], obj.d_list[i], cls_name, i)
+        cls_scale = torch.tanh(obj.cls_beta[i])
+        gate = torch.sigmoid(obj.cls_bypass[i](act))
+        cls_in = pose * (1.0 + cls_scale * gate)
+
+        act_s = obj.sym_dropout[i](act)
+        prior = obj.sym_prior[i](act_s)
+        prior = obj.sym_norm[i](prior)
+        prior = prior - prior.mean(dim=1, keepdim=True)
+        sym_scale = torch.tanh(obj.sym_beta[i])
+        cls_prior = sym_scale * prior
+
+        box_feats.append(pose)
+        cls_feats.append(cls_in)
+        cls_priors.append(cls_prior)
+    return box_feats, cls_feats, cls_priors
+
+
 class CapsuleDetectv5(Detect):
     """Capsule Detect v5: box uses raw pose, cls uses stabilized symbolic prior."""
 
@@ -1157,83 +1270,15 @@ class CapsuleDetectv5(Detect):
             reg_max = int(parsed[2])
             end2end = bool(parsed[3])
 
-        if not isinstance(k, (list, tuple)) or not isinstance(d, (list, tuple)):
-            raise TypeError("CapsuleDetectv5 requires list/tuple k and d (per-level settings).")
-
-        ch = tuple(int(c) for c in ch)
-        nl = len(ch)
-        if len(k) != nl or len(d) != nl:
-            raise ValueError(f"CapsuleDetectv5 k/d length must equal number of levels ({nl}).")
-
-        self.k_list = tuple(int(v) for v in k)
-        self.d_list = tuple(int(v) for v in d)
-
-        for i, c in enumerate(ch):
-            expected = self.k_list[i] * (self.d_list[i] + 1)
-            if c != expected:
-                raise ValueError(
-                    f"CapsuleDetectv5 level-{i} channel mismatch: got {c}, "
-                    f"expected {expected} from k={self.k_list[i]}, d={self.d_list[i]}."
-                )
-
-        merged_ch = tuple(k_i * d_i for k_i, d_i in zip(self.k_list, self.d_list))
+        self.k_list, self.d_list, merged_ch = _setup_capsule_layout(k, d, ch, "CapsuleDetectv5")
         super().__init__(nc=nc, reg_max=reg_max, end2end=end2end, ch=merged_ch)
-
-        self.cls_bypass = nn.ModuleList()
-        self.cls_beta = nn.ParameterList()
-        self.sym_prior = nn.ModuleList()
-        self.sym_norm = nn.ModuleList()
-        self.sym_dropout = nn.ModuleList()
-        self.sym_beta = nn.ParameterList()
-
-        for k_i, d_i in zip(self.k_list, self.d_list):
-            pose_ch = k_i * d_i
-            cls_hidden = max(16, k_i * 2)
-            self.cls_bypass.append(
-                nn.Sequential(
-                    nn.Conv2d(k_i, cls_hidden, 1, bias=True),
-                    nn.SiLU(inplace=True),
-                    nn.Conv2d(cls_hidden, pose_ch, 1, bias=True),
-                )
-            )
-            self.cls_beta.append(nn.Parameter(torch.tensor(0.1)))
-            self.sym_dropout.append(nn.Dropout2d(p=0.1))
-            self.sym_prior.append(nn.Conv2d(k_i, self.nc, 1, bias=False))
-            self.sym_norm.append(nn.GroupNorm(1, self.nc))
-            self.sym_beta.append(nn.Parameter(torch.tensor(0.1)))
+        _init_capsule_semantic_heads(self)
 
     def _split_pose_act(self, x: torch.Tensor, i: int) -> tuple[torch.Tensor, torch.Tensor]:
-        k_i = self.k_list[i]
-        d_i = self.d_list[i]
-        b, c, h, w = x.shape
-        expected = k_i * (d_i + 1)
-        if c != expected:
-            raise ValueError(f"CapsuleDetectv5 level-{i} channel mismatch: got {c}, expected {expected}.")
-
-        caps = x.view(b, k_i, d_i + 1, h, w)
-        pose = caps[:, :, :d_i].reshape(b, k_i * d_i, h, w).contiguous()
-        act = caps[:, :, d_i].contiguous()
-        return pose, act
+        return _capsule_split_pose_act(x, self.k_list[i], self.d_list[i], "CapsuleDetectv5", i)
 
     def _build_feats(self, x: list[torch.Tensor]) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
-        box_feats, cls_feats, cls_priors = [], [], []
-        for i, xi in enumerate(x):
-            pose, act = self._split_pose_act(xi, i)
-            cls_scale = torch.tanh(self.cls_beta[i])
-            cls_in = pose + cls_scale * self.cls_bypass[i](act)
-
-            # Stabilized symbolic prior: dropout + normalization + per-location zero-mean.
-            act_s = self.sym_dropout[i](act)
-            prior = self.sym_prior[i](act_s)
-            prior = self.sym_norm[i](prior)
-            prior = prior - prior.mean(dim=1, keepdim=True)
-            sym_scale = torch.tanh(self.sym_beta[i])
-            cls_prior = sym_scale * prior
-
-            box_feats.append(pose)
-            cls_feats.append(cls_in)
-            cls_priors.append(cls_prior)
-        return box_feats, cls_feats, cls_priors
+        return _capsule_build_feats(self, x)
 
     def forward_head(
         self, x: list[torch.Tensor], box_head: torch.nn.Module = None, cls_head: torch.nn.Module = None
@@ -1252,4 +1297,99 @@ class CapsuleDetectv5(Detect):
         boxes = torch.cat(box_list, dim=-1)
         scores = torch.cat(cls_list, dim=-1)
         return dict(boxes=boxes, scores=scores, feats=x)
+
+
+class CapsuleDetectv6(CapsuleDetectv5):
+    """Capsule Detect v6: replace additive cls correction with multiplicative act gate."""
+
+    def _build_feats(self, x: list[torch.Tensor]) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
+        return _capsule_build_feats_gated(self, x)
+
+
+class CapsuleSegmentv1(Segment):
+    """Capsule-style Segment head aligned with CapsuleDetectv6 semantics."""
+
+    def __init__(
+        self,
+        nc: int = 80,
+        *args,
+        nm: int = 32,
+        npr: int = 256,
+        reg_max: int = 16,
+        end2end: bool = False,
+        k: list[int] | tuple[int, ...] = (4, 8, 16),
+        d: list[int] | tuple[int, ...] = (16, 16, 16),
+        ch: tuple = (),
+    ):
+        parsed = list(args)
+        if parsed and isinstance(parsed[-1], (list, tuple)):
+            ch = tuple(parsed.pop(-1))
+
+        if len(parsed) not in (2, 4, 6):
+            raise ValueError("CapsuleSegmentv1 expects [k_list, d_list, (nm, npr), reg_max, end2end, ch].")
+
+        k, d = parsed[0], parsed[1]
+        if len(parsed) == 4:
+            if isinstance(parsed[3], bool):
+                reg_max = int(parsed[2])
+                end2end = bool(parsed[3])
+            else:
+                nm = int(parsed[2])
+                npr = int(parsed[3])
+        elif len(parsed) == 6:
+            nm = int(parsed[2])
+            npr = int(parsed[3])
+            reg_max = int(parsed[4])
+            end2end = bool(parsed[5])
+
+        self.k_list, self.d_list, merged_ch = _setup_capsule_layout(k, d, ch, "CapsuleSegmentv1")
+        super().__init__(nc=nc, nm=nm, npr=npr, reg_max=reg_max, end2end=end2end, ch=merged_ch)
+        _init_capsule_semantic_heads(self)
+        self.proto = Proto26(merged_ch, self.npr, self.nm, nc)
+
+    def _split_pose_act(self, x: torch.Tensor, i: int) -> tuple[torch.Tensor, torch.Tensor]:
+        return _capsule_split_pose_act(x, self.k_list[i], self.d_list[i], "CapsuleSegmentv1", i)
+
+    def _build_feats(self, x: list[torch.Tensor]) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
+        return _capsule_build_feats_gated(self, x)
+
+    def forward_head(
+        self,
+        x: list[torch.Tensor],
+        box_head: torch.nn.Module = None,
+        cls_head: torch.nn.Module = None,
+        mask_head: torch.nn.Module = None,
+    ) -> dict[str, torch.Tensor]:
+        if box_head is None or cls_head is None:
+            return dict()
+
+        box_feats, cls_feats, cls_priors = self._build_feats(x)
+        bs = x[0].shape[0]
+        boxes = torch.cat([box_head[i](box_feats[i]).view(bs, 4 * self.reg_max, -1) for i in range(self.nl)], dim=-1)
+        scores = torch.cat(
+            [(cls_head[i](cls_feats[i]) + cls_priors[i]).view(bs, self.nc, -1) for i in range(self.nl)],
+            dim=-1,
+        )
+        preds = dict(boxes=boxes, scores=scores, feats=cls_feats)
+        if mask_head is not None:
+            preds["mask_coefficient"] = torch.cat(
+                [mask_head[i](cls_feats[i]).view(bs, self.nm, -1) for i in range(self.nl)],
+                dim=-1,
+            )
+        return preds
+
+    def forward(self, x: list[torch.Tensor]) -> tuple | list[torch.Tensor] | dict[str, torch.Tensor]:
+        outputs = Detect.forward(self, x)
+        preds = outputs[1] if isinstance(outputs, tuple) else outputs
+        proto_in = preds["one2many"]["feats"] if isinstance(preds, dict) and self.end2end else preds["feats"]
+        proto = self.proto(proto_in)  # multi-level Proto26 over merged capsule features
+        if isinstance(preds, dict):
+            if self.end2end:
+                preds["one2many"]["proto"] = proto
+                preds["one2one"]["proto"] = tuple(p.detach() for p in proto) if isinstance(proto, tuple) else proto.detach()
+            else:
+                preds["proto"] = proto
+        if self.training:
+            return preds
+        return (outputs, proto) if self.export else ((outputs[0], proto), preds)
 
