@@ -36,6 +36,44 @@ def build_parser() -> argparse.ArgumentParser:
         default="auto",
         help="Optimizer name (e.g., SGD, AdamW, RMSProp, MuSGD, auto).",
     )
+    parser.add_argument(
+        "--close_mosaic",
+        type=int,
+        default=None,
+        help="Disable mosaic for the last N epochs.",
+    )
+    parser.add_argument(
+        "--mosaic",
+        type=float,
+        default=None,
+        help="Mosaic augmentation probability.",
+    )
+    parser.add_argument(
+        "--scale",
+        type=float,
+        default=None,
+        help="Random scale augmentation strength.",
+    )
+    parser.add_argument(
+        "--erasing",
+        type=float,
+        default=None,
+        help="Random erasing augmentation probability.",
+    )
+    parser.add_argument(
+        "--copy_paste",
+        type=float,
+        default=None,
+        help="Copy-paste augmentation probability.",
+    )
+    parser.add_argument(
+        "--mixup",
+        type=float,
+        default=None,
+        help="MixUp augmentation probability.",
+    )
+    parser.add_argument("--seg", type=float, default=None, help="Segmentation mask loss gain (segment task only).")
+    parser.add_argument("--sem", type=float, default=None, help="Semantic mask loss gain (segment task only).")
 
     # LR/scheduler stability knobs for capsule routing blocks.
     parser.add_argument("--lr0", type=float, default=5e-4, help="Initial learning rate.")
@@ -109,6 +147,10 @@ def main() -> None:
     )
     if args.task:
         common["task"] = args.task
+    for key in ("close_mosaic", "mosaic", "scale", "erasing", "copy_paste", "mixup", "seg", "sem"):
+        value = getattr(args, key)
+        if value is not None:
+            common[key] = value
 
     freeze_epochs = max(0, min(args.freeze_backbone_epochs, args.epochs)) if args.enable_freeze_pretrain else 0
     if freeze_epochs == 0:

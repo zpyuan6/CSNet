@@ -6,8 +6,11 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 from ultralytics import YOLO
+from ultralytics.models import yolo
 from ultralytics.models.yolo.detect import DetectionTrainer
+from ultralytics.nn.tasks import SegmentationModel
 from ultralytics.utils import DEFAULT_CFG
+from ultralytics.utils.loss import E2ELoss, v8SegmentationLoss
 
 from models import register_ultralytics_modules
 
@@ -16,8 +19,113 @@ def train(model_cfg: str, data_cfg: str, **kwargs):
     """Train a custom YOLO-like model using Ultralytics."""
     register_ultralytics_modules()
     model = YOLO(model_cfg)
-
+    task = kwargs.get("task", "")
+    trainer = WeightedSegmentationTrainer if task == "segment" else None
+    if trainer is not None:
+        return model.train(data=data_cfg, trainer=trainer, **kwargs)
     return model.train(data=data_cfg, **kwargs)
+
+
+class WeightedSegmentationLoss(v8SegmentationLoss):
+    """Local segmentation loss with independent seg/sem gains."""
+
+    def __init__(
+        self,
+        model,
+        tal_topk: int = 10,
+        tal_topk2: int | None = None,
+        seg_gain: float = 7.5,
+        sem_gain: float = 7.5,
+    ):
+        super().__init__(model, tal_topk=tal_topk, tal_topk2=tal_topk2)
+        self.seg_gain = float(seg_gain)
+        self.sem_gain = float(sem_gain)
+
+    def loss(self, preds: dict[str, torch.Tensor], batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
+        pred_masks, proto = preds["mask_coefficient"].permute(0, 2, 1).contiguous(), preds["proto"]
+        loss = torch.zeros(5, device=self.device)  # box, seg, cls, dfl, sem
+        if isinstance(proto, tuple) and len(proto) == 2:
+            proto, pred_semseg = proto
+        else:
+            pred_semseg = None
+        (fg_mask, target_gt_idx, target_bboxes, _, _), det_loss, _ = self.get_assigned_targets_and_loss(preds, batch)
+        loss[0], loss[2], loss[3] = det_loss[0], det_loss[1], det_loss[2]
+
+        batch_size, _, mask_h, mask_w = proto.shape
+        if fg_mask.sum():
+            masks = batch["masks"].to(self.device).float()
+            if tuple(masks.shape[-2:]) != (mask_h, mask_w):
+                proto = F.interpolate(proto, masks.shape[-2:], mode="bilinear", align_corners=False)
+
+            imgsz = torch.tensor(preds["feats"][0].shape[2:], device=self.device, dtype=pred_masks.dtype) * self.stride[0]
+            loss[1] = self.calculate_segmentation_loss(
+                fg_mask,
+                masks,
+                target_gt_idx,
+                target_bboxes,
+                batch["batch_idx"].view(-1, 1),
+                proto,
+                pred_masks,
+                imgsz,
+            )
+            if pred_semseg is not None:
+                sem_masks = batch["sem_masks"].to(self.device)
+                sem_masks = F.one_hot(sem_masks.long(), num_classes=self.nc).permute(0, 3, 1, 2).float()
+
+                if self.overlap:
+                    mask_zero = masks == 0
+                    sem_masks[mask_zero.unsqueeze(1).expand_as(sem_masks)] = 0
+                else:
+                    batch_idx = batch["batch_idx"].view(-1)
+                    for i in range(batch_size):
+                        instance_mask_i = masks[batch_idx == i]
+                        if len(instance_mask_i) == 0:
+                            continue
+                        sem_masks[i, :, instance_mask_i.sum(dim=0) == 0] = 0
+
+                loss[4] = self.bcedice_loss(pred_semseg, sem_masks)
+                loss[4] *= self.sem_gain
+        else:
+            loss[1] += (proto * 0).sum() + (pred_masks * 0).sum()
+            if pred_semseg is not None:
+                loss[4] += (pred_semseg * 0).sum()
+
+        loss[1] *= self.seg_gain
+        return loss * batch_size, loss.detach()
+
+
+class WeightedSegmentationModel(SegmentationModel):
+    """Segmentation model using local weighted segmentation criterion."""
+
+    def init_criterion(self):
+        seg_gain = float(getattr(self, "seg_gain", self.args.box))
+        sem_gain = float(getattr(self, "sem_gain", self.args.box))
+        factory = lambda model, tal_topk=10, tal_topk2=None: WeightedSegmentationLoss(
+            model,
+            tal_topk=tal_topk,
+            tal_topk2=tal_topk2,
+            seg_gain=seg_gain,
+            sem_gain=sem_gain,
+        )
+        return E2ELoss(self, factory) if getattr(self, "end2end", False) else factory(self)
+
+
+class WeightedSegmentationTrainer(yolo.segment.SegmentationTrainer):
+    """Local segmentation trainer exposing independent seg/sem gains."""
+
+    def __init__(self, cfg=DEFAULT_CFG, overrides: dict | None = None, _callbacks=None):
+        o = dict(overrides or {})
+        self.seg_gain = float(o.pop("seg", o.get("box", 7.5)))
+        self.sem_gain = float(o.pop("sem", o.get("box", 7.5)))
+        super().__init__(cfg, o, _callbacks)
+
+    def get_model(self, cfg: dict | str | None = None, weights: str | None = None, verbose: bool = True):
+        model = WeightedSegmentationModel(cfg, nc=self.data["nc"], ch=self.data["channels"], verbose=verbose)
+        model.seg_gain = self.seg_gain
+        model.sem_gain = self.sem_gain
+        if weights:
+            model.load(weights)
+        return model
 
 
 @dataclass

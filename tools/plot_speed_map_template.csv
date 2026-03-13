@@ -1,0 +1,7 @@
+model,map,speed_ms,series,highlight
+YOLO26n,0.401,1.20,YOLO,false
+YOLO26s,0.460,1.90,YOLO,false
+YOLO26m,0.510,3.10,YOLO,false
+YOLO26l,0.535,4.90,YOLO,false
+YOLO26x,0.555,7.60,YOLO,false
+CapsNeckHeadv6_SegV2,0.402,1.45,Ours,true

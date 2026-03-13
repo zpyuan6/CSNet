@@ -1245,6 +1245,26 @@ def _capsule_build_feats_gated(
     return box_feats, cls_feats, cls_priors
 
 
+def _capsule_build_feats_boxcls(
+    obj: nn.Module, x: list[torch.Tensor]
+) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
+    box_feats, cls_feats, cls_priors = [], [], []
+    cls_name = obj.__class__.__name__
+    for i, xi in enumerate(x):
+        pose, act = _capsule_split_pose_act(xi, obj.k_list[i], obj.d_list[i], cls_name, i)
+        act_s = obj.sym_dropout[i](act)
+        prior = obj.sym_prior[i](act_s)
+        prior = obj.sym_norm[i](prior)
+        prior = prior - prior.mean(dim=1, keepdim=True)
+        sym_scale = torch.tanh(obj.sym_beta[i])
+        cls_prior = sym_scale * prior
+
+        box_feats.append(pose)
+        cls_feats.append(pose)
+        cls_priors.append(cls_prior)
+    return box_feats, cls_feats, cls_priors
+
+
 class CapsuleDetectv5(Detect):
     """Capsule Detect v5: box uses raw pose, cls uses stabilized symbolic prior."""
 
@@ -1304,6 +1324,13 @@ class CapsuleDetectv6(CapsuleDetectv5):
 
     def _build_feats(self, x: list[torch.Tensor]) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
         return _capsule_build_feats_gated(self, x)
+
+
+class CapsuleDetectv7(CapsuleDetectv5):
+    """Capsule Detect v7: cls head consumes raw pose features plus symbolic priors only."""
+
+    def _build_feats(self, x: list[torch.Tensor]) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
+        return _capsule_build_feats_boxcls(self, x)
 
 
 class CapsuleSegmentv1(Segment):
@@ -1379,9 +1406,10 @@ class CapsuleSegmentv1(Segment):
         return preds
 
     def forward(self, x: list[torch.Tensor]) -> tuple | list[torch.Tensor] | dict[str, torch.Tensor]:
+        _, cls_feats, _ = self._build_feats(x)
         outputs = Detect.forward(self, x)
         preds = outputs[1] if isinstance(outputs, tuple) else outputs
-        proto_in = preds["one2many"]["feats"] if isinstance(preds, dict) and self.end2end else preds["feats"]
+        proto_in = cls_feats
         proto = self.proto(proto_in)  # multi-level Proto26 over merged capsule features
         if isinstance(preds, dict):
             if self.end2end:
@@ -1392,4 +1420,11 @@ class CapsuleSegmentv1(Segment):
         if self.training:
             return preds
         return (outputs, proto) if self.export else ((outputs[0], proto), preds)
+
+
+class CapsuleSegmentv2(CapsuleSegmentv1):
+    """Capsule Segment v2: cls head consumes raw pose features and symbolic priors only."""
+
+    def _build_feats(self, x: list[torch.Tensor]) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
+        return _capsule_build_feats_boxcls(self, x)
 

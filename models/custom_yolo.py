@@ -83,7 +83,9 @@ from modules import (
     CapsuleDetectv4,
     CapsuleDetectv5,
     CapsuleDetectv6,
+    CapsuleDetectv7,
     CapsuleSegmentv1,
+    CapsuleSegmentv2,
     CapsuleTap,
     DeformableCapsBlock,
 )
@@ -97,7 +99,9 @@ CUSTOM_MODULES = {
     "CapsuleDetectv4": CapsuleDetectv4,
     "CapsuleDetectv5": CapsuleDetectv5,
     "CapsuleDetectv6": CapsuleDetectv6,
+    "CapsuleDetectv7": CapsuleDetectv7,
     "CapsuleSegmentv1": CapsuleSegmentv1,
+    "CapsuleSegmentv2": CapsuleSegmentv2,
     "CapsProj": CapsProj,
     "CapsAlign": CapsAlign,
     "CapsRoute": CapsRoute,
@@ -199,7 +203,9 @@ def parse_model(d: dict[str, Any], ch: int, verbose: bool = True):
             CapsuleDetectv4,
             CapsuleDetectv5,
             CapsuleDetectv6,
+            CapsuleDetectv7,
             CapsuleSegmentv1,
+            CapsuleSegmentv2,
             WorldDetect,
             YOLOEDetect,
             Segment,
@@ -357,11 +363,11 @@ def parse_model(d: dict[str, Any], ch: int, verbose: bool = True):
         elif m is Concat:
             c2 = sum(ch[x] for x in f)
         elif m in detect_modules:
-            if m in {CapsuleDetect, CapsuleDetectv1, CapsuleDetectv2, CapsuleDetectv4, CapsuleDetectv5, CapsuleDetectv6, CapsuleSegmentv1}:
+            if m in {CapsuleDetect, CapsuleDetectv1, CapsuleDetectv2, CapsuleDetectv4, CapsuleDetectv5, CapsuleDetectv6, CapsuleDetectv7, CapsuleSegmentv1, CapsuleSegmentv2}:
                 if len(args) < 3:
-                    raise ValueError('CapsuleDetect/CapsuleDetectv1/CapsuleDetectv2/CapsuleDetectv4/CapsuleDetectv5/CapsuleDetectv6/CapsuleSegmentv1 args must include [nc, k_list, d_list].')
+                    raise ValueError('CapsuleDetect/CapsuleDetectv1/CapsuleDetectv2/CapsuleDetectv4/CapsuleDetectv5/CapsuleDetectv6/CapsuleDetectv7/CapsuleSegmentv1/CapsuleSegmentv2 args must include [nc, k_list, d_list].')
                 if not isinstance(args[1], (list, tuple)) or not isinstance(args[2], (list, tuple)):
-                    raise TypeError('CapsuleDetect/CapsuleDetectv1/CapsuleDetectv2/CapsuleDetectv4/CapsuleDetectv5/CapsuleDetectv6/CapsuleSegmentv1 requires k_list and d_list in YAML.')
+                    raise TypeError('CapsuleDetect/CapsuleDetectv1/CapsuleDetectv2/CapsuleDetectv4/CapsuleDetectv5/CapsuleDetectv6/CapsuleDetectv7/CapsuleSegmentv1/CapsuleSegmentv2 requires k_list and d_list in YAML.')
                 # Width-scale capsule type counts per level; keep pose dims as provided.
                 args[1] = [max(int(round(int(v) * width)), 1) for v in args[1]]
                 args[2] = [int(v) for v in args[2]]
@@ -377,7 +383,9 @@ def parse_model(d: dict[str, Any], ch: int, verbose: bool = True):
                 CapsuleDetectv4,
                 CapsuleDetectv5,
                 CapsuleDetectv6,
+                CapsuleDetectv7,
                 CapsuleSegmentv1,
+                CapsuleSegmentv2,
                 YOLOEDetect,
                 Segment,
                 Segment26,

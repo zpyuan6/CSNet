@@ -1,0 +1,17 @@
+model,weights,series,highlight
+YOLO26n,yolo26n.pt,YOLO26,false
+YOLO26s,yolo26s.pt,YOLO26,false
+YOLO26m,yolo26m.pt,YOLO26,false
+YOLO26l,yolo26l.pt,YOLO26,false
+YOLO26x,yolo26x.pt,YOLO26,false
+YOLOv8n,yolov8n.pt,YOLOv8,false
+YOLOv8s,yolov8s.pt,YOLOv8,false
+YOLOv8m,yolov8m.pt,YOLOv8,false
+YOLOv8l,yolov8l.pt,YOLOv8,false
+YOLOv8x,yolov8x.pt,YOLOv8,false
+YOLO11n,yolo11n.pt,YOLO11,false
+YOLO11s,yolo11s.pt,YOLO11,false
+YOLO11m,yolo11m.pt,YOLO11,false
+YOLO11l,yolo11l.pt,YOLO11,false
+YOLO11x,yolo11x.pt,YOLO11,false
+CapsNeckHeadv6_SegV2,runs\segment\runs\segment\runs\detect\runs\train\CapsNeckHeadv6_SegV2_FromDetGated\weights\best.pt,Ours,true
