@@ -1,0 +1,16 @@
+model,family,resolution,params_m,flops_b,fps_t4,speed_ms_t4,coco_zs_ap,coco_zs_ap50,lvis_zs_ap,lvis_mini_ap,local_map50,local_map50_95,notes
+GLIP-L,GLIP,800,232,896,6.5,153.85,49.8,61.7,29.3,35.0,0,0,public zero-shot baseline; params/flops/speed approximated from common large-ViT deployment scale
+GroundingDINO-T,GroundingDINO,800,172,490,11.0,90.91,48.4,59.0,27.4,32.0,0,0,official zero-shot checkpoint; params/flops/speed approximated for Swin-T scale
+GroundingDINO-1.6-Pro,GroundingDINO/API,800,938,2200,2.5,400.00,55.4,66.0,51.1,56.0,0,0,official API model; model size and latency are rough deployment estimates
+YOLO-World-S-640,YOLO-World,640,12,28.6,185.0,5.41,26.6,36.6,18.5,23.6,0,0,official v2.1 zero-shot; params/flops approximated by corresponding YOLOv8-S backbone; speed estimated
+YOLO-World-M-640,YOLO-World,640,27,78.9,121.0,8.26,34.1,43.0,24.1,30.6,0,0,official v2.1 zero-shot; params/flops approximated by corresponding YOLOv8-M backbone; speed estimated
+YOLO-World-L-640,YOLO-World,640,45,165.2,88.0,11.36,36.8,44.9,26.8,33.8,0,0,official v2.1 zero-shot; params/flops approximated by corresponding YOLOv8-L backbone; speed estimated
+YOLO-World-X-640,YOLO-World,640,69,257.8,62.0,16.13,38.5,46.7,28.6,35.8,0,0,official v2.1 zero-shot; params/flops approximated by corresponding YOLOv8-X backbone; speed estimated
+YOLOE-v8-S-T,YOLOE,640,12,28.6,305.8,3.27,0,0,27.9,31.0,0,0,text-prompt zero-shot on LVIS minival; flops approximated by YOLOv8-S backbone
+YOLOE-v8-M-T,YOLOE,640,27,78.9,156.7,6.38,0,0,32.6,36.0,0,0,text-prompt zero-shot on LVIS minival; flops approximated by YOLOv8-M backbone
+YOLOE-v8-L-T,YOLOE,640,45,165.2,102.5,9.76,0,0,35.9,39.0,0,0,text-prompt zero-shot on LVIS minival; flops approximated by YOLOv8-L backbone
+YOLOE-11-S-T,YOLOE,640,10,21.5,301.2,3.32,0,0,27.5,30.5,0,0,text-prompt zero-shot on LVIS minival; flops approximated by YOLO11-S backbone
+YOLOE-11-M-T,YOLOE,640,21,68.0,168.3,5.94,0,0,33.0,36.5,0,0,text-prompt zero-shot on LVIS minival; flops approximated by YOLO11-M backbone
+YOLOE-11-L-T,YOLOE,640,26,86.9,130.5,7.66,0,0,35.2,38.5,0,0,text-prompt zero-shot on LVIS minival; flops approximated by YOLO11-L backbone
+Caps-OVD-World-B324,Ours,640,3.333896,6.5,91.18,10.97,0,0,0,0,0.06392,0.04578,local run best val from runs/detect/caps_ovd_world_resume_b324; params/flops/speed approximated by SCN-n backbone
+Caps-OVD-COCO-Grounding-LVIS-B32,Ours,640,3.333896,6.5,91.18,10.97,0,0,0,0,0.05909,0.04182,local run best val from runs/detect/caps_ovd_coco_grounding_lvis_resume_b32; params/flops/speed approximated by SCN-n backbone

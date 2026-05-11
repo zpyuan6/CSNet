@@ -1,11 +1,31 @@
-from .unsupervised.atlas import build_concept_atlas
-from .unsupervised.graph import build_concept_class_graph
-from .unsupervised.relevance import audit_single_image
-from .unsupervised.report import save_audit_report
+from .unsupervised_audit import (
+    AtlasReference,
+    ConceptEdge,
+    ConceptHeatmap,
+    ConceptNode,
+    DetectionTarget,
+    GlobalGraph,
+    InferenceTree,
+    SampleAttribution,
+    build_parser as build_unsupervised_audit_parser,
+    load_baseline_sample_attribution,
+    load_json,
+    main as run_unsupervised_audit,
+    save_json,
+)
 
 __all__ = [
-    "audit_single_image",
-    "build_concept_atlas",
-    "build_concept_class_graph",
-    "save_audit_report",
+    "AtlasReference",
+    "ConceptEdge",
+    "ConceptHeatmap",
+    "ConceptNode",
+    "DetectionTarget",
+    "GlobalGraph",
+    "InferenceTree",
+    "SampleAttribution",
+    "build_unsupervised_audit_parser",
+    "load_baseline_sample_attribution",
+    "load_json",
+    "run_unsupervised_audit",
+    "save_json",
 ]

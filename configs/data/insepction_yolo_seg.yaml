@@ -1,0 +1,7 @@
+path: C:/Datasets/Insepction_yolo_seg
+train: images/train
+val: images/val
+test: images/test
+
+nc: 6
+names: ['MT_Blowhole', 'MT_Break', 'MT_Crack', 'MT_Fray', 'MT_Free', 'MT_Uneven']

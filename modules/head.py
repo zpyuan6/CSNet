@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import math
+import time
 
 import torch
 import torch.nn as nn
@@ -1265,6 +1266,42 @@ def _capsule_build_feats_boxcls(
     return box_feats, cls_feats, cls_priors
 
 
+def _capsule_build_feats_boxcls_simpleprior(
+    obj: nn.Module, x: list[torch.Tensor]
+) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
+    box_feats, cls_feats, cls_priors = [], [], []
+    cls_name = obj.__class__.__name__
+    for i, xi in enumerate(x):
+        pose, act = _capsule_split_pose_act(xi, obj.k_list[i], obj.d_list[i], cls_name, i)
+        act_s = obj.sym_dropout[i](act)
+        prior = obj.sym_prior[i](act_s)
+        sym_scale = torch.tanh(obj.sym_beta[i])
+        cls_prior = sym_scale * prior
+
+        box_feats.append(pose)
+        cls_feats.append(pose)
+        cls_priors.append(cls_prior)
+    return box_feats, cls_feats, cls_priors
+
+
+def _capsule_build_feats_open_vocab(
+    obj: nn.Module, x: list[torch.Tensor]
+) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
+    box_feats, cls_feats, acts = [], [], []
+    cls_name = obj.__class__.__name__
+    for i, xi in enumerate(x):
+        pose, act = _capsule_split_pose_act(xi, obj.k_list[i], obj.d_list[i], cls_name, i)
+        cls_in = pose
+        if getattr(obj, "with_act_gate", False):
+            cls_scale = torch.tanh(obj.ov_beta[i])
+            gate = torch.sigmoid(obj.ov_gate[i](act))
+            cls_in = pose * (1.0 + cls_scale * gate)
+        box_feats.append(pose)
+        cls_feats.append(cls_in)
+        acts.append(act)
+    return box_feats, cls_feats, acts
+
+
 class CapsuleDetectv5(Detect):
     """Capsule Detect v5: box uses raw pose, cls uses stabilized symbolic prior."""
 
@@ -1329,8 +1366,472 @@ class CapsuleDetectv6(CapsuleDetectv5):
 class CapsuleDetectv7(CapsuleDetectv5):
     """Capsule Detect v7: cls head consumes raw pose features plus symbolic priors only."""
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.profile_head = False
+        self._head_profile: dict[str, float] = {}
+        self._head_profile_calls = 0
+
+    def _ensure_profile_attrs(self) -> None:
+        if not hasattr(self, "profile_head"):
+            self.profile_head = False
+        if not hasattr(self, "_head_profile"):
+            self._head_profile = {}
+        if not hasattr(self, "_head_profile_calls"):
+            self._head_profile_calls = 0
+
+    def reset_head_profile(self) -> None:
+        self._ensure_profile_attrs()
+        self._head_profile = {
+            "split_pose_act_ms": 0.0,
+            "cls_prior_ms": 0.0,
+            "box_head_ms": 0.0,
+            "cls_head_ms": 0.0,
+            "cat_ms": 0.0,
+        }
+        self._head_profile_calls = 0
+
+    def get_head_profile(self) -> dict[str, float]:
+        self._ensure_profile_attrs()
+        if not self._head_profile:
+            return {}
+        out = dict(self._head_profile)
+        calls = max(self._head_profile_calls, 1)
+        out["calls"] = float(self._head_profile_calls)
+        out["total_ms"] = sum(v for k, v in out.items() if k.endswith("_ms"))
+        for key in list(self._head_profile):
+            out[key.replace("_ms", "_avg_ms")] = self._head_profile[key] / calls
+        return out
+
+    def _sync_profile(self) -> None:
+        self._ensure_profile_attrs()
+        if self.profile_head and torch.cuda.is_available():
+            torch.cuda.synchronize()
+
     def _build_feats(self, x: list[torch.Tensor]) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
-        return _capsule_build_feats_boxcls(self, x)
+        self._ensure_profile_attrs()
+        if not self.profile_head:
+            return _capsule_build_feats_boxcls(self, x)
+
+        if not self._head_profile:
+            self.reset_head_profile()
+
+        box_feats, cls_feats, cls_priors = [], [], []
+        cls_name = self.__class__.__name__
+        for i, xi in enumerate(x):
+            self._sync_profile()
+            t0 = time.perf_counter()
+            pose, act = _capsule_split_pose_act(xi, self.k_list[i], self.d_list[i], cls_name, i)
+            self._sync_profile()
+            self._head_profile["split_pose_act_ms"] += (time.perf_counter() - t0) * 1000.0
+
+            self._sync_profile()
+            t0 = time.perf_counter()
+            act_s = self.sym_dropout[i](act)
+            prior = self.sym_prior[i](act_s)
+            prior = self.sym_norm[i](prior)
+            prior = prior - prior.mean(dim=1, keepdim=True)
+            sym_scale = torch.tanh(self.sym_beta[i])
+            cls_prior = sym_scale * prior
+            self._sync_profile()
+            self._head_profile["cls_prior_ms"] += (time.perf_counter() - t0) * 1000.0
+
+            box_feats.append(pose)
+            cls_feats.append(pose)
+            cls_priors.append(cls_prior)
+        return box_feats, cls_feats, cls_priors
+
+    def forward_head(
+        self, x: list[torch.Tensor], box_head: torch.nn.Module = None, cls_head: torch.nn.Module = None
+    ) -> dict[str, torch.Tensor]:
+        self._ensure_profile_attrs()
+        if box_head is None or cls_head is None:
+            return dict()
+
+        box_feats, cls_feats, cls_priors = self._build_feats(x)
+        bs = x[0].shape[0]
+
+        if not self.profile_head:
+            box_list = [box_head[i](box_feats[i]).view(bs, 4 * self.reg_max, -1) for i in range(self.nl)]
+            cls_list = [
+                (cls_head[i](cls_feats[i]) + cls_priors[i]).view(bs, self.nc, -1)
+                for i in range(self.nl)
+            ]
+            boxes = torch.cat(box_list, dim=-1)
+            scores = torch.cat(cls_list, dim=-1)
+            return dict(boxes=boxes, scores=scores, feats=x)
+
+        if not self._head_profile:
+            self.reset_head_profile()
+        self._head_profile_calls += 1
+
+        box_list, cls_list = [], []
+        for i in range(self.nl):
+            self._sync_profile()
+            t0 = time.perf_counter()
+            box_i = box_head[i](box_feats[i]).view(bs, 4 * self.reg_max, -1)
+            self._sync_profile()
+            self._head_profile["box_head_ms"] += (time.perf_counter() - t0) * 1000.0
+            box_list.append(box_i)
+
+            self._sync_profile()
+            t0 = time.perf_counter()
+            cls_i = (cls_head[i](cls_feats[i]) + cls_priors[i]).view(bs, self.nc, -1)
+            self._sync_profile()
+            self._head_profile["cls_head_ms"] += (time.perf_counter() - t0) * 1000.0
+            cls_list.append(cls_i)
+
+        self._sync_profile()
+        t0 = time.perf_counter()
+        boxes = torch.cat(box_list, dim=-1)
+        scores = torch.cat(cls_list, dim=-1)
+        self._sync_profile()
+        self._head_profile["cat_ms"] += (time.perf_counter() - t0) * 1000.0
+        return dict(boxes=boxes, scores=scores, feats=x)
+
+
+class CapsuleDetectv8(CapsuleDetectv5):
+    """Capsule Detect v8: raw pose cls path with simplified cls_prior (no norm/centering)."""
+
+    def _build_feats(self, x: list[torch.Tensor]) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
+        return _capsule_build_feats_boxcls_simpleprior(self, x)
+
+
+class CapsuleOpenVocabDetect(Detect):
+    """Capsule detection head with open-vocabulary classification via text embedding matching."""
+
+    def __init__(
+        self,
+        nc: int = 80,
+        *args,
+        reg_max: int = 16,
+        end2end: bool = False,
+        embed: int = 256,
+        with_act_gate: bool = False,
+        with_objectness_prior: bool = True,
+        k: list[int] | tuple[int, ...] = (4, 8, 16),
+        d: list[int] | tuple[int, ...] = (16, 16, 16),
+        ch: tuple = (),
+    ):
+        parsed = list(args)
+        if parsed and isinstance(parsed[-1], (list, tuple)):
+            ch = tuple(parsed.pop(-1))
+
+        if len(parsed) not in (2, 4, 7):
+            raise ValueError(
+                "CapsuleOpenVocabDetect expects [k_list, d_list, (reg_max, end2end, embed, with_act_gate, "
+                "with_objectness_prior), ch]."
+            )
+
+        k, d = parsed[0], parsed[1]
+        if len(parsed) == 4:
+            reg_max = int(parsed[2])
+            end2end = bool(parsed[3])
+        elif len(parsed) == 7:
+            # Support both direct args order:
+            #   [k_list, d_list, reg_max, end2end, embed, with_act_gate, with_objectness_prior]
+            # and parser-appended order:
+            #   [k_list, d_list, embed, with_act_gate, with_objectness_prior, reg_max, end2end]
+            if type(parsed[3]) is bool and type(parsed[4]) is bool and type(parsed[6]) is bool:
+                embed = int(parsed[2])
+                with_act_gate = bool(parsed[3])
+                with_objectness_prior = bool(parsed[4])
+                reg_max = int(parsed[5])
+                end2end = bool(parsed[6])
+            else:
+                reg_max = int(parsed[2])
+                end2end = bool(parsed[3])
+                embed = int(parsed[4])
+                with_act_gate = bool(parsed[5])
+                with_objectness_prior = bool(parsed[6])
+
+        self.k_list, self.d_list, merged_ch = _setup_capsule_layout(k, d, ch, "CapsuleOpenVocabDetect")
+        super().__init__(nc=nc, reg_max=reg_max, end2end=end2end, ch=merged_ch)
+
+        self.embed = int(embed)
+        self.with_act_gate = bool(with_act_gate)
+        self.with_objectness_prior = bool(with_objectness_prior)
+
+        self.emb_head = nn.ModuleList()
+        self.ov_gate = nn.ModuleList()
+        self.ov_beta = nn.ParameterList()
+        self.obj_prior = nn.ModuleList()
+
+        for k_i, d_i in zip(self.k_list, self.d_list):
+            pose_ch = k_i * d_i
+            self.emb_head.append(
+                nn.Sequential(
+                    Conv(pose_ch, pose_ch, 3),
+                    DWConv(pose_ch, pose_ch, 3),
+                    nn.Conv2d(pose_ch, self.embed, 1, bias=True),
+                )
+            )
+            if self.with_act_gate:
+                hidden = max(16, k_i * 2)
+                self.ov_gate.append(
+                    nn.Sequential(
+                        nn.Conv2d(k_i, hidden, 1, bias=True),
+                        nn.SiLU(inplace=True),
+                        nn.Conv2d(hidden, pose_ch, 1, bias=True),
+                    )
+                )
+                self.ov_beta.append(nn.Parameter(torch.tensor(0.1)))
+            else:
+                self.ov_gate.append(nn.Identity())
+                self.ov_beta.append(nn.Parameter(torch.tensor(0.0), requires_grad=False))
+
+            if self.with_objectness_prior:
+                self.obj_prior.append(nn.Conv2d(k_i, 1, 1, bias=True))
+            else:
+                self.obj_prior.append(nn.Identity())
+
+        self.logit_scale = nn.Parameter(torch.tensor(math.log(1 / 0.07), dtype=torch.float32))
+        self.register_buffer("cached_text_embeddings", torch.empty(0), persistent=False)
+
+    def set_text_embeddings(self, text_embs: torch.Tensor | None) -> None:
+        """Cache normalized text embeddings for inference."""
+        if text_embs is None:
+            self.cached_text_embeddings = torch.empty(0, device=self.logit_scale.device)
+            return
+        if text_embs.ndim != 2:
+            raise ValueError(f"text_embs must be 2D [num_classes, embed_dim], got shape {tuple(text_embs.shape)}.")
+        self.cached_text_embeddings = F.normalize(text_embs.detach().to(self.logit_scale.device), dim=-1)
+
+    def _split_pose_act(self, x: torch.Tensor, i: int) -> tuple[torch.Tensor, torch.Tensor]:
+        return _capsule_split_pose_act(x, self.k_list[i], self.d_list[i], "CapsuleOpenVocabDetect", i)
+
+    def _build_feats(self, x: list[torch.Tensor]) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
+        return _capsule_build_feats_open_vocab(self, x)
+
+    def _prepare_text_embeddings(self, text_embs: torch.Tensor | None, bs: int, device: torch.device) -> torch.Tensor | None:
+        if text_embs is None:
+            if self.cached_text_embeddings.numel() == 0:
+                return None
+            text = self.cached_text_embeddings
+        else:
+            text = text_embs
+
+        if text.ndim == 2:
+            text = text.unsqueeze(0).expand(bs, -1, -1)
+        elif text.ndim != 3:
+            raise ValueError(f"text_embs must be 2D or 3D, got shape {tuple(text.shape)}.")
+
+        if text.shape[-1] != self.embed:
+            raise ValueError(f"text_embs last dim must equal embed={self.embed}, got {text.shape[-1]}.")
+        return F.normalize(text.to(device=device, dtype=self.logit_scale.dtype), dim=-1)
+
+    def _compute_ov_scores(
+        self, cls_feats: list[torch.Tensor], acts: list[torch.Tensor], text_embs: torch.Tensor | None
+    ) -> tuple[torch.Tensor | None, list[torch.Tensor], torch.Tensor | None]:
+        bs = cls_feats[0].shape[0]
+        level_embeddings = []
+        for i in range(self.nl):
+            emb = self.emb_head[i](cls_feats[i])
+            if self.with_objectness_prior:
+                emb = emb * (1.0 + torch.sigmoid(self.obj_prior[i](acts[i])))
+            level_embeddings.append(emb)
+
+        text = self._prepare_text_embeddings(text_embs, bs, cls_feats[0].device)
+        if text is None:
+            return None, level_embeddings, None
+
+        visual_tokens = torch.cat(
+            [F.normalize(emb.flatten(2).transpose(1, 2), dim=-1) for emb in level_embeddings],
+            dim=1,
+        )
+        scale = self.logit_scale.exp().clamp(max=100.0)
+        scores = torch.einsum("bnd,bcd->bcn", visual_tokens, text) * scale
+        return scores, level_embeddings, text
+
+    def forward_head(
+        self,
+        x: list[torch.Tensor],
+        text_embs: torch.Tensor | None = None,
+        box_head: torch.nn.Module = None,
+        cls_head: torch.nn.Module = None,
+    ) -> dict[str, torch.Tensor]:
+        del cls_head  # fixed-class cls head is unused in open-vocabulary mode
+        if box_head is None:
+            return dict()
+
+        box_feats, cls_feats, acts = self._build_feats(x)
+        bs = x[0].shape[0]
+        boxes = torch.cat([box_head[i](box_feats[i]).view(bs, 4 * self.reg_max, -1) for i in range(self.nl)], dim=-1)
+        scores, level_embeddings, text = self._compute_ov_scores(cls_feats, acts, text_embs)
+
+        preds = {
+            "boxes": boxes,
+            "embeddings": level_embeddings,
+            "cls_feats": cls_feats,
+            "acts": acts,
+            "feats": x,
+        }
+        if scores is not None:
+            preds["scores"] = scores
+            preds["text_embeddings"] = text
+        return preds
+
+    def forward(
+        self, x: list[torch.Tensor], text_embs: torch.Tensor | None = None
+    ) -> dict[str, torch.Tensor] | torch.Tensor | tuple[torch.Tensor, dict[str, torch.Tensor]]:
+        preds = self.forward_head(x, text_embs=text_embs, **self.one2many)
+        if self.end2end:
+            x_detach = [xi.detach() for xi in x]
+            one2one = self.forward_head(x_detach, text_embs=text_embs, **self.one2one)
+            preds = {"one2many": preds, "one2one": one2one}
+        if self.training:
+            return preds
+
+        infer_preds = preds["one2one"] if self.end2end else preds
+        if "scores" not in infer_preds:
+            raise ValueError("CapsuleOpenVocabDetect inference requires text_embs or cached text embeddings.")
+
+        original_nc = self.nc
+        self.nc = int(infer_preds["scores"].shape[1])
+        try:
+            y = self._inference(infer_preds)
+            if self.end2end:
+                y = self.postprocess(y.permute(0, 2, 1))
+        finally:
+            self.nc = original_nc
+        return y if self.export else (y, preds)
+
+
+class _Residual(nn.Module):
+    """Residual wrapper matching the YOLOE text adapter pattern."""
+
+    def __init__(self, m: nn.Module) -> None:
+        super().__init__()
+        self.m = m
+        if hasattr(m, "w3") and isinstance(m.w3, nn.Linear):
+            nn.init.zeros_(m.w3.weight)
+            if m.w3.bias is not None:
+                nn.init.zeros_(m.w3.bias)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x + self.m(x)
+
+
+class _SwiGLUFFN(nn.Module):
+    """SwiGLU feed-forward block following the official YOLOE adapter structure."""
+
+    def __init__(self, c1: int, c2: int, e: float = 1.5) -> None:
+        super().__init__()
+        hidden = int((2 * c2) / 3)
+        hidden = max(1, int(hidden * e))
+        self.w12 = nn.Linear(c1, hidden * 2, bias=False)
+        self.w3 = nn.Linear(hidden, c2, bias=False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x12 = self.w12(x)
+        x1, x2 = x12.chunk(2, dim=-1)
+        return self.w3(F.silu(x1) * x2)
+
+
+class CapsuleOpenVocabDetectV2(CapsuleOpenVocabDetect):
+    """Capsule OVD head with YOLOE-style text adaptation and pre-head text fusion."""
+
+    def __init__(
+        self,
+        nc: int = 80,
+        *args,
+        reg_max: int = 16,
+        end2end: bool = False,
+        embed: int = 512,
+        with_act_gate: bool = False,
+        with_objectness_prior: bool = True,
+        k: list[int] | tuple[int, ...] = (4, 8, 16),
+        d: list[int] | tuple[int, ...] = (16, 16, 16),
+        ch: tuple = (),
+    ):
+        super().__init__(
+            nc,
+            *args,
+            reg_max=reg_max,
+            end2end=end2end,
+            embed=embed,
+            with_act_gate=with_act_gate,
+            with_objectness_prior=with_objectness_prior,
+            k=k,
+            d=d,
+            ch=ch,
+        )
+        self.reprta = _Residual(_SwiGLUFFN(self.embed, self.embed))
+        self.text_gate = nn.ModuleList(
+            nn.Sequential(
+                nn.Linear(self.embed, self.embed * 2),
+                nn.SiLU(inplace=True),
+                nn.Linear(self.embed * 2, self.embed * 2),
+            )
+            for _ in range(self.nl)
+        )
+
+    def get_tpe(self, tpe: torch.Tensor | None) -> torch.Tensor | None:
+        """Adapt and normalize raw text prompt embeddings."""
+        if tpe is None:
+            return None
+        return F.normalize(self.reprta(tpe), dim=-1, p=2)
+
+    def set_text_embeddings(self, text_embs: torch.Tensor | None) -> None:
+        """Cache adapted text embeddings for inference."""
+        if text_embs is None:
+            self.cached_text_embeddings = torch.empty(0, device=self.logit_scale.device)
+            return
+        if text_embs.ndim != 2:
+            raise ValueError(f"text_embs must be 2D [num_classes, embed_dim], got shape {tuple(text_embs.shape)}.")
+        adapted = self.get_tpe(text_embs.unsqueeze(0)).squeeze(0)
+        self.cached_text_embeddings = adapted.detach().to(self.logit_scale.device)
+
+    def _prepare_text_embeddings(self, text_embs: torch.Tensor | None, bs: int, device: torch.device) -> torch.Tensor | None:
+        if text_embs is None:
+            if self.cached_text_embeddings.numel() == 0:
+                return None
+            text = self.cached_text_embeddings.unsqueeze(0).expand(bs, -1, -1)
+        else:
+            text = text_embs
+            if text.ndim == 2:
+                text = text.unsqueeze(0).expand(bs, -1, -1)
+            elif text.ndim != 3:
+                raise ValueError(f"text_embs must be 2D or 3D, got shape {tuple(text.shape)}.")
+            if text.shape[-1] != self.embed:
+                raise ValueError(f"text_embs last dim must equal embed={self.embed}, got {text.shape[-1]}.")
+            text = self.get_tpe(text)
+
+        return text.to(device=device, dtype=self.logit_scale.dtype)
+
+    def _compute_ov_scores(
+        self, cls_feats: list[torch.Tensor], acts: list[torch.Tensor], text_embs: torch.Tensor | None
+    ) -> tuple[torch.Tensor | None, list[torch.Tensor], torch.Tensor | None]:
+        bs = cls_feats[0].shape[0]
+        text = self._prepare_text_embeddings(text_embs, bs, cls_feats[0].device)
+
+        text_summary = None
+        if text is not None:
+            text_summary = text.mean(dim=1)
+
+        level_embeddings = []
+        for i in range(self.nl):
+            emb = self.emb_head[i](cls_feats[i])
+            if self.with_objectness_prior:
+                emb = emb * (1.0 + torch.sigmoid(self.obj_prior[i](acts[i])))
+            if text_summary is not None:
+                scale_bias = self.text_gate[i](text_summary).to(device=emb.device, dtype=emb.dtype)
+                scale, bias = scale_bias.chunk(2, dim=-1)
+                scale = scale.unsqueeze(-1).unsqueeze(-1)
+                bias = bias.unsqueeze(-1).unsqueeze(-1)
+                emb = emb * (1.0 + 0.1 * torch.tanh(scale)) + 0.1 * bias
+            level_embeddings.append(emb)
+
+        if text is None:
+            return None, level_embeddings, None
+
+        visual_tokens = torch.cat(
+            [F.normalize(emb.flatten(2).transpose(1, 2), dim=-1) for emb in level_embeddings],
+            dim=1,
+        )
+        scale = self.logit_scale.exp().clamp(max=100.0)
+        scores = torch.einsum("bnd,bcd->bcn", visual_tokens, text) * scale
+        return scores, level_embeddings, text
 
 
 class CapsuleSegmentv1(Segment):
@@ -1427,4 +1928,11 @@ class CapsuleSegmentv2(CapsuleSegmentv1):
 
     def _build_feats(self, x: list[torch.Tensor]) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
         return _capsule_build_feats_boxcls(self, x)
+
+
+class CapsuleSegmentv3(CapsuleSegmentv1):
+    """Capsule Segment v3: raw pose cls path with simplified cls_prior (no norm/centering)."""
+
+    def _build_feats(self, x: list[torch.Tensor]) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
+        return _capsule_build_feats_boxcls_simpleprior(self, x)
 

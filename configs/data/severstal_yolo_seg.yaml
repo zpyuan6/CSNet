@@ -1,0 +1,7 @@
+path: C:/Datasets/severstal_yolo_seg
+train: images/train
+val: images/val
+test: images/test
+
+nc: 4
+names: ['defect_1', 'defect_2', 'defect_3', 'defect_4']

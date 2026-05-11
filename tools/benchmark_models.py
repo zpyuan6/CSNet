@@ -1,9 +1,14 @@
 import argparse
 import csv
+import sys
 import time
 from pathlib import Path
 
 import torch
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from models import register_ultralytics_modules
 from ultralytics import YOLO
@@ -16,8 +21,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--models-csv",
         type=Path,
-        required=True,
+        default=None,
         help="CSV with columns: model,weights,series,highlight",
+    )
+    parser.add_argument(
+        "--model",
+        action="append",
+        default=[],
+        help="Inline model spec: NAME=WEIGHTS[,SERIES[,HIGHLIGHT]]. Can be passed multiple times.",
     )
     parser.add_argument("--data", type=str, required=True, help="Dataset yaml path.")
     parser.add_argument("--imgsz", type=int, default=640, help="Evaluation image size.")
@@ -61,6 +72,26 @@ def load_model_rows(csv_path: Path) -> list[dict]:
             )
     if not rows:
         raise ValueError("Model CSV is empty.")
+    return rows
+
+
+def parse_inline_model_specs(specs: list[str]) -> list[dict]:
+    rows = []
+    for spec in specs:
+        if "=" not in spec:
+            raise ValueError(f"Invalid --model spec '{spec}'. Expected NAME=WEIGHTS[,SERIES[,HIGHLIGHT]].")
+        name, rest = spec.split("=", 1)
+        parts = [p.strip() for p in rest.split(",")]
+        if not parts or not parts[0]:
+            raise ValueError(f"Invalid --model spec '{spec}'. Missing weights path.")
+        rows.append(
+            {
+                "model": name.strip(),
+                "weights": parts[0],
+                "series": parts[1] if len(parts) > 1 and parts[1] else "Other",
+                "highlight": parts[2] if len(parts) > 2 and parts[2] else "false",
+            }
+        )
     return rows
 
 
@@ -126,7 +157,13 @@ def write_results(rows: list[dict], out_csv: Path) -> None:
 def main() -> None:
     args = parse_args()
     register_ultralytics_modules()
-    model_rows = load_model_rows(args.models_csv)
+    model_rows = []
+    if args.models_csv is not None:
+        model_rows.extend(load_model_rows(args.models_csv))
+    if args.model:
+        model_rows.extend(parse_inline_model_specs(args.model))
+    if not model_rows:
+        raise ValueError("Provide either --models-csv or at least one --model.")
     speed_source = resolve_speed_source(args.data, args.split, args.speed_image)
 
     results = []

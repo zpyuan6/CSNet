@@ -1,0 +1,1195 @@
+meta:
+  dataset: coco
+  version: v1
+  description: Minimal hierarchical concept definitions for supervised audit on COCO.
+
+levels:
+  - id: L1
+    name: primitive
+    description: Low-level visual primitives.
+  - id: L2
+    name: local_structure
+    description: Local parts or localized visual structures.
+  - id: L3
+    name: semantic_pattern
+    description: Mid/high-level semantic patterns.
+  - id: L4
+    name: class_concept
+    description: Final class concepts.
+
+level_concepts:
+  L1:
+    - edge_segment
+    - corner_junction
+    - curved_contour
+    - closed_boundary
+    - circular_outline
+    - rectangular_patch
+    - elongated_line
+    - blob_region
+    - parallel_stripe
+    - repetitive_texture
+  L2:
+    - wheel
+    - window_pane
+    - handle_like_part
+    - leg_like_support
+    - seat_surface
+    - tabletop_surface
+    - screen_surface
+    - bottle_neck
+    - cup_rim
+    - container_opening
+    - flat_panel
+    - keyboard_key_region
+    - animal_head_region
+    - animal_ear_like_part
+    - limb_like_segment
+    - tail_like_part
+    - wing_like_part
+    - plant_leaf_cluster
+    - flower_like_blob
+    - food_round_body
+    - utensil_head
+    - appliance_door_panel
+    - faucet_like_part
+    - book_spine_region
+    - clock_face
+    - soft_body_region
+    - rigid_body_shell
+  L3:
+    - human_body_configuration
+    - wheeled_transport_structure
+    - rideable_two_wheel_structure
+    - large_vehicle_structure
+    - animal_body_configuration
+    - bird_body_configuration
+    - carried_item_structure
+    - sports_gear_structure
+    - food_item_structure
+    - drink_container_structure
+    - utensil_structure
+    - furniture_structure
+    - table_furniture_structure
+    - sanitary_fixture_structure
+    - display_device_structure
+    - computing_device_structure
+    - kitchen_appliance_structure
+    - reading_object_structure
+    - decorative_object_structure
+    - grooming_tool_structure
+    - plant_container_structure
+  L4:
+    - person
+    - bicycle
+    - car
+    - motorcycle
+    - airplane
+    - bus
+    - train
+    - truck
+    - boat
+    - traffic_light
+    - fire_hydrant
+    - stop_sign
+    - parking_meter
+    - bench
+    - bird
+    - cat
+    - dog
+    - horse
+    - sheep
+    - cow
+    - elephant
+    - bear
+    - zebra
+    - giraffe
+    - backpack
+    - umbrella
+    - handbag
+    - tie
+    - suitcase
+    - frisbee
+    - skis
+    - snowboard
+    - sports_ball
+    - kite
+    - baseball_bat
+    - baseball_glove
+    - skateboard
+    - surfboard
+    - tennis_racket
+    - bottle
+    - wine_glass
+    - cup
+    - fork
+    - knife
+    - spoon
+    - bowl
+    - banana
+    - apple
+    - sandwich
+    - orange
+    - broccoli
+    - carrot
+    - hot_dog
+    - pizza
+    - donut
+    - cake
+    - chair
+    - couch
+    - potted_plant
+    - bed
+    - dining_table
+    - toilet
+    - tv
+    - laptop
+    - mouse
+    - remote
+    - keyboard
+    - cell_phone
+    - microwave
+    - oven
+    - toaster
+    - sink
+    - refrigerator
+    - book
+    - clock
+    - vase
+    - scissors
+    - teddy_bear
+    - hair_drier
+    - toothbrush
+
+concepts:
+  - id: edge_segment
+    name: edge segment
+    level: L1
+    description: A short local boundary segment.
+    children: []
+
+  - id: corner_junction
+    name: corner junction
+    level: L1
+    description: A local corner-like meeting of boundaries.
+    children: []
+
+  - id: curved_contour
+    name: curved contour
+    level: L1
+    description: A locally curved boundary segment.
+    children: []
+
+  - id: closed_boundary
+    name: closed boundary
+    level: L1
+    description: A boundary enclosing a local region.
+    children: []
+
+  - id: circular_outline
+    name: circular outline
+    level: L1
+    description: A roughly circular boundary shape.
+    children: []
+
+  - id: rectangular_patch
+    name: rectangular patch
+    level: L1
+    description: A local rectangular planar region.
+    children: []
+
+  - id: elongated_line
+    name: elongated line
+    level: L1
+    description: A long thin local line structure.
+    children: []
+
+  - id: blob_region
+    name: blob region
+    level: L1
+    description: A compact local filled region.
+    children: []
+
+  - id: parallel_stripe
+    name: parallel stripe
+    level: L1
+    description: Multiple nearby parallel elongated bands.
+    children: []
+
+  - id: repetitive_texture
+    name: repetitive texture
+    level: L1
+    description: Repeating local visual pattern.
+    children: []
+
+  - id: wheel
+    name: wheel
+    level: L2
+    description: A round rolling part attached to a vehicle body.
+    children:
+      - circular_outline
+      - closed_boundary
+      - edge_segment
+
+  - id: window_pane
+    name: window pane
+    level: L2
+    description: A flat framed transparent opening on an object body.
+    children:
+      - rectangular_patch
+      - edge_segment
+      - corner_junction
+
+  - id: handle_like_part
+    name: handle-like part
+    level: L2
+    description: A short graspable projecting part.
+    children:
+      - curved_contour
+      - elongated_line
+
+  - id: leg_like_support
+    name: leg-like support
+    level: L2
+    description: A narrow support part extending downward.
+    children:
+      - elongated_line
+      - edge_segment
+
+  - id: seat_surface
+    name: seat surface
+    level: L2
+    description: A flat sitting surface.
+    children:
+      - rectangular_patch
+      - edge_segment
+
+  - id: tabletop_surface
+    name: tabletop surface
+    level: L2
+    description: A flat table-like horizontal surface.
+    children:
+      - rectangular_patch
+      - edge_segment
+
+  - id: screen_surface
+    name: screen surface
+    level: L2
+    description: A flat display-like visual panel.
+    children:
+      - rectangular_patch
+      - edge_segment
+      - corner_junction
+
+  - id: bottle_neck
+    name: bottle neck
+    level: L2
+    description: A narrow upper container section.
+    children:
+      - curved_contour
+      - elongated_line
+
+  - id: cup_rim
+    name: cup rim
+    level: L2
+    description: A rounded open upper boundary of a small container.
+    children:
+      - curved_contour
+      - closed_boundary
+
+  - id: container_opening
+    name: container opening
+    level: L2
+    description: An open upper region of a container.
+    children:
+      - closed_boundary
+      - curved_contour
+
+  - id: flat_panel
+    name: flat panel
+    level: L2
+    description: A compact flat rigid panel-like part.
+    children:
+      - rectangular_patch
+      - edge_segment
+
+  - id: keyboard_key_region
+    name: keyboard key region
+    level: L2
+    description: A dense small-grid key area.
+    children:
+      - repetitive_texture
+      - rectangular_patch
+
+  - id: animal_head_region
+    name: animal head region
+    level: L2
+    description: The head-like front region of an animal body.
+    children:
+      - blob_region
+      - curved_contour
+
+  - id: animal_ear_like_part
+    name: animal ear-like part
+    level: L2
+    description: A pointed or rounded ear-like local structure.
+    children:
+      - edge_segment
+      - curved_contour
+
+  - id: limb_like_segment
+    name: limb-like segment
+    level: L2
+    description: A narrow articulated body segment.
+    children:
+      - elongated_line
+      - curved_contour
+
+  - id: tail_like_part
+    name: tail-like part
+    level: L2
+    description: A rear elongated appendage.
+    children:
+      - elongated_line
+      - curved_contour
+
+  - id: wing_like_part
+    name: wing-like part
+    level: L2
+    description: A broad extended side part resembling a wing.
+    children:
+      - curved_contour
+      - edge_segment
+
+  - id: plant_leaf_cluster
+    name: plant leaf cluster
+    level: L2
+    description: A clustered set of plant leaf shapes.
+    children:
+      - curved_contour
+      - blob_region
+
+  - id: flower_like_blob
+    name: flower-like blob
+    level: L2
+    description: A rounded decorative flower-like region.
+    children:
+      - blob_region
+      - curved_contour
+
+  - id: food_round_body
+    name: food round body
+    level: L2
+    description: A rounded compact food body.
+    children:
+      - blob_region
+      - closed_boundary
+
+  - id: utensil_head
+    name: utensil head
+    level: L2
+    description: The functional end of an eating utensil.
+    children:
+      - elongated_line
+      - edge_segment
+
+  - id: appliance_door_panel
+    name: appliance door panel
+    level: L2
+    description: A large front-facing appliance panel or door.
+    children:
+      - rectangular_patch
+      - edge_segment
+
+  - id: faucet_like_part
+    name: faucet-like part
+    level: L2
+    description: A curved projecting outlet-like structure.
+    children:
+      - curved_contour
+      - elongated_line
+
+  - id: book_spine_region
+    name: book spine region
+    level: L2
+    description: A narrow rectangular spine-like object region.
+    children:
+      - rectangular_patch
+      - elongated_line
+
+  - id: clock_face
+    name: clock face
+    level: L2
+    description: A circular front face with internal markings.
+    children:
+      - circular_outline
+      - repetitive_texture
+
+  - id: soft_body_region
+    name: soft body region
+    level: L2
+    description: A deformable plush or soft object body.
+    children:
+      - blob_region
+      - curved_contour
+
+  - id: rigid_body_shell
+    name: rigid body shell
+    level: L2
+    description: A hard enclosing outer body.
+    children:
+      - edge_segment
+      - closed_boundary
+
+  - id: human_body_configuration
+    name: human body configuration
+    level: L3
+    description: A head-torso-limb human arrangement.
+    children:
+      - limb_like_segment
+      - animal_head_region
+
+  - id: wheeled_transport_structure
+    name: wheeled transport structure
+    level: L3
+    description: A vehicle-like structure supported by wheels.
+    children:
+      - wheel
+      - window_pane
+      - rigid_body_shell
+
+  - id: rideable_two_wheel_structure
+    name: rideable two-wheel structure
+    level: L3
+    description: A narrow rideable structure with two wheels.
+    children:
+      - wheel
+      - handle_like_part
+      - rigid_body_shell
+
+  - id: large_vehicle_structure
+    name: large vehicle structure
+    level: L3
+    description: A large transport body with multiple windows and wheels.
+    children:
+      - wheeled_transport_structure
+      - window_pane
+
+  - id: animal_body_configuration
+    name: animal body configuration
+    level: L3
+    description: A non-human animal body arrangement.
+    children:
+      - animal_head_region
+      - limb_like_segment
+      - tail_like_part
+
+  - id: bird_body_configuration
+    name: bird body configuration
+    level: L3
+    description: A bird-like body with wings and head.
+    children:
+      - wing_like_part
+      - animal_head_region
+
+  - id: carried_item_structure
+    name: carried item structure
+    level: L3
+    description: A small carried personal item configuration.
+    children:
+      - handle_like_part
+      - rigid_body_shell
+
+  - id: sports_gear_structure
+    name: sports gear structure
+    level: L3
+    description: A sports tool or sports equipment arrangement.
+    children:
+      - elongated_line
+      - flat_panel
+      - rigid_body_shell
+
+  - id: food_item_structure
+    name: food item structure
+    level: L3
+    description: A compact edible item configuration.
+    children:
+      - food_round_body
+      - blob_region
+
+  - id: drink_container_structure
+    name: drink container structure
+    level: L3
+    description: A hollow object intended to contain liquid.
+    children:
+      - bottle_neck
+      - cup_rim
+      - container_opening
+
+  - id: utensil_structure
+    name: utensil structure
+    level: L3
+    description: A hand-held eating utensil configuration.
+    children:
+      - utensil_head
+      - elongated_line
+
+  - id: furniture_structure
+    name: furniture structure
+    level: L3
+    description: A human-use furniture arrangement.
+    children:
+      - seat_surface
+      - leg_like_support
+
+  - id: table_furniture_structure
+    name: table furniture structure
+    level: L3
+    description: A table-like furniture arrangement.
+    children:
+      - tabletop_surface
+      - leg_like_support
+
+  - id: sanitary_fixture_structure
+    name: sanitary fixture structure
+    level: L3
+    description: A bathroom or washing fixture configuration.
+    children:
+      - appliance_door_panel
+      - faucet_like_part
+
+  - id: display_device_structure
+    name: display device structure
+    level: L3
+    description: A display-oriented electronic device configuration.
+    children:
+      - screen_surface
+      - flat_panel
+
+  - id: computing_device_structure
+    name: computing device structure
+    level: L3
+    description: A keyboard-screen computing device arrangement.
+    children:
+      - screen_surface
+      - keyboard_key_region
+
+  - id: kitchen_appliance_structure
+    name: kitchen appliance structure
+    level: L3
+    description: A box-like kitchen appliance arrangement.
+    children:
+      - appliance_door_panel
+      - flat_panel
+
+  - id: reading_object_structure
+    name: reading object structure
+    level: L3
+    description: A flat or spine-bearing reading object.
+    children:
+      - book_spine_region
+      - rectangular_patch
+
+  - id: decorative_object_structure
+    name: decorative object structure
+    level: L3
+    description: A decorative household object arrangement.
+    children:
+      - flower_like_blob
+      - rigid_body_shell
+
+  - id: grooming_tool_structure
+    name: grooming tool structure
+    level: L3
+    description: A small hand-held grooming tool arrangement.
+    children:
+      - elongated_line
+      - handle_like_part
+
+  - id: plant_container_structure
+    name: plant container structure
+    level: L3
+    description: A plant-like cluster emerging from a container.
+    children:
+      - plant_leaf_cluster
+      - rigid_body_shell
+
+  - id: person
+    name: person
+    level: L4
+    description: Person class concept.
+    children:
+      - human_body_configuration
+
+  - id: bicycle
+    name: bicycle
+    level: L4
+    description: Bicycle class concept.
+    children:
+      - rideable_two_wheel_structure
+
+  - id: car
+    name: car
+    level: L4
+    description: Car class concept.
+    children:
+      - wheeled_transport_structure
+
+  - id: motorcycle
+    name: motorcycle
+    level: L4
+    description: Motorcycle class concept.
+    children:
+      - rideable_two_wheel_structure
+
+  - id: airplane
+    name: airplane
+    level: L4
+    description: Airplane class concept.
+    children:
+      - wing_like_part
+      - rigid_body_shell
+
+  - id: bus
+    name: bus
+    level: L4
+    description: Bus class concept.
+    children:
+      - large_vehicle_structure
+
+  - id: train
+    name: train
+    level: L4
+    description: Train class concept.
+    children:
+      - large_vehicle_structure
+
+  - id: truck
+    name: truck
+    level: L4
+    description: Truck class concept.
+    children:
+      - large_vehicle_structure
+
+  - id: boat
+    name: boat
+    level: L4
+    description: Boat class concept.
+    children:
+      - rigid_body_shell
+
+  - id: traffic_light
+    name: traffic light
+    level: L4
+    description: Traffic light class concept.
+    children:
+      - elongated_line
+      - circular_outline
+
+  - id: fire_hydrant
+    name: fire hydrant
+    level: L4
+    description: Fire hydrant class concept.
+    children:
+      - rigid_body_shell
+
+  - id: stop_sign
+    name: stop sign
+    level: L4
+    description: Stop sign class concept.
+    children:
+      - flat_panel
+
+  - id: parking_meter
+    name: parking meter
+    level: L4
+    description: Parking meter class concept.
+    children:
+      - rigid_body_shell
+
+  - id: bench
+    name: bench
+    level: L4
+    description: Bench class concept.
+    children:
+      - furniture_structure
+
+  - id: bird
+    name: bird
+    level: L4
+    description: Bird class concept.
+    children:
+      - bird_body_configuration
+
+  - id: cat
+    name: cat
+    level: L4
+    description: Cat class concept.
+    children:
+      - animal_body_configuration
+
+  - id: dog
+    name: dog
+    level: L4
+    description: Dog class concept.
+    children:
+      - animal_body_configuration
+
+  - id: horse
+    name: horse
+    level: L4
+    description: Horse class concept.
+    children:
+      - animal_body_configuration
+
+  - id: sheep
+    name: sheep
+    level: L4
+    description: Sheep class concept.
+    children:
+      - animal_body_configuration
+
+  - id: cow
+    name: cow
+    level: L4
+    description: Cow class concept.
+    children:
+      - animal_body_configuration
+
+  - id: elephant
+    name: elephant
+    level: L4
+    description: Elephant class concept.
+    children:
+      - animal_body_configuration
+
+  - id: bear
+    name: bear
+    level: L4
+    description: Bear class concept.
+    children:
+      - animal_body_configuration
+
+  - id: zebra
+    name: zebra
+    level: L4
+    description: Zebra class concept.
+    children:
+      - animal_body_configuration
+      - parallel_stripe
+
+  - id: giraffe
+    name: giraffe
+    level: L4
+    description: Giraffe class concept.
+    children:
+      - animal_body_configuration
+
+  - id: backpack
+    name: backpack
+    level: L4
+    description: Backpack class concept.
+    children:
+      - carried_item_structure
+
+  - id: umbrella
+    name: umbrella
+    level: L4
+    description: Umbrella class concept.
+    children:
+      - curved_contour
+      - elongated_line
+
+  - id: handbag
+    name: handbag
+    level: L4
+    description: Handbag class concept.
+    children:
+      - carried_item_structure
+
+  - id: tie
+    name: tie
+    level: L4
+    description: Tie class concept.
+    children:
+      - elongated_line
+
+  - id: suitcase
+    name: suitcase
+    level: L4
+    description: Suitcase class concept.
+    children:
+      - carried_item_structure
+
+  - id: frisbee
+    name: frisbee
+    level: L4
+    description: Frisbee class concept.
+    children:
+      - circular_outline
+
+  - id: skis
+    name: skis
+    level: L4
+    description: Skis class concept.
+    children:
+      - sports_gear_structure
+
+  - id: snowboard
+    name: snowboard
+    level: L4
+    description: Snowboard class concept.
+    children:
+      - sports_gear_structure
+
+  - id: sports_ball
+    name: sports ball
+    level: L4
+    description: Sports ball class concept.
+    children:
+      - circular_outline
+      - food_round_body
+
+  - id: kite
+    name: kite
+    level: L4
+    description: Kite class concept.
+    children:
+      - flat_panel
+      - elongated_line
+
+  - id: baseball_bat
+    name: baseball bat
+    level: L4
+    description: Baseball bat class concept.
+    children:
+      - elongated_line
+      - sports_gear_structure
+
+  - id: baseball_glove
+    name: baseball glove
+    level: L4
+    description: Baseball glove class concept.
+    children:
+      - curved_contour
+      - sports_gear_structure
+
+  - id: skateboard
+    name: skateboard
+    level: L4
+    description: Skateboard class concept.
+    children:
+      - sports_gear_structure
+      - wheel
+
+  - id: surfboard
+    name: surfboard
+    level: L4
+    description: Surfboard class concept.
+    children:
+      - sports_gear_structure
+
+  - id: tennis_racket
+    name: tennis racket
+    level: L4
+    description: Tennis racket class concept.
+    children:
+      - sports_gear_structure
+      - handle_like_part
+
+  - id: bottle
+    name: bottle
+    level: L4
+    description: Bottle class concept.
+    children:
+      - drink_container_structure
+
+  - id: wine_glass
+    name: wine glass
+    level: L4
+    description: Wine glass class concept.
+    children:
+      - drink_container_structure
+
+  - id: cup
+    name: cup
+    level: L4
+    description: Cup class concept.
+    children:
+      - drink_container_structure
+
+  - id: fork
+    name: fork
+    level: L4
+    description: Fork class concept.
+    children:
+      - utensil_structure
+
+  - id: knife
+    name: knife
+    level: L4
+    description: Knife class concept.
+    children:
+      - utensil_structure
+
+  - id: spoon
+    name: spoon
+    level: L4
+    description: Spoon class concept.
+    children:
+      - utensil_structure
+
+  - id: bowl
+    name: bowl
+    level: L4
+    description: Bowl class concept.
+    children:
+      - drink_container_structure
+
+  - id: banana
+    name: banana
+    level: L4
+    description: Banana class concept.
+    children:
+      - food_item_structure
+      - curved_contour
+
+  - id: apple
+    name: apple
+    level: L4
+    description: Apple class concept.
+    children:
+      - food_item_structure
+
+  - id: sandwich
+    name: sandwich
+    level: L4
+    description: Sandwich class concept.
+    children:
+      - food_item_structure
+
+  - id: orange
+    name: orange
+    level: L4
+    description: Orange class concept.
+    children:
+      - food_item_structure
+
+  - id: broccoli
+    name: broccoli
+    level: L4
+    description: Broccoli class concept.
+    children:
+      - food_item_structure
+      - repetitive_texture
+
+  - id: carrot
+    name: carrot
+    level: L4
+    description: Carrot class concept.
+    children:
+      - food_item_structure
+      - elongated_line
+
+  - id: hot_dog
+    name: hot dog
+    level: L4
+    description: Hot dog class concept.
+    children:
+      - food_item_structure
+
+  - id: pizza
+    name: pizza
+    level: L4
+    description: Pizza class concept.
+    children:
+      - food_item_structure
+      - circular_outline
+
+  - id: donut
+    name: donut
+    level: L4
+    description: Donut class concept.
+    children:
+      - food_item_structure
+      - circular_outline
+
+  - id: cake
+    name: cake
+    level: L4
+    description: Cake class concept.
+    children:
+      - food_item_structure
+
+  - id: chair
+    name: chair
+    level: L4
+    description: Chair class concept.
+    children:
+      - furniture_structure
+
+  - id: couch
+    name: couch
+    level: L4
+    description: Couch class concept.
+    children:
+      - furniture_structure
+      - soft_body_region
+
+  - id: potted_plant
+    name: potted plant
+    level: L4
+    description: Potted plant class concept.
+    children:
+      - plant_container_structure
+
+  - id: bed
+    name: bed
+    level: L4
+    description: Bed class concept.
+    children:
+      - furniture_structure
+      - soft_body_region
+
+  - id: dining_table
+    name: dining table
+    level: L4
+    description: Dining table class concept.
+    children:
+      - table_furniture_structure
+
+  - id: toilet
+    name: toilet
+    level: L4
+    description: Toilet class concept.
+    children:
+      - sanitary_fixture_structure
+
+  - id: tv
+    name: tv
+    level: L4
+    description: TV class concept.
+    children:
+      - display_device_structure
+
+  - id: laptop
+    name: laptop
+    level: L4
+    description: Laptop class concept.
+    children:
+      - computing_device_structure
+
+  - id: mouse
+    name: mouse
+    level: L4
+    description: Mouse class concept.
+    children:
+      - rigid_body_shell
+
+  - id: remote
+    name: remote
+    level: L4
+    description: Remote class concept.
+    children:
+      - rigid_body_shell
+      - elongated_line
+
+  - id: keyboard
+    name: keyboard
+    level: L4
+    description: Keyboard class concept.
+    children:
+      - keyboard_key_region
+
+  - id: cell_phone
+    name: cell phone
+    level: L4
+    description: Cell phone class concept.
+    children:
+      - display_device_structure
+
+  - id: microwave
+    name: microwave
+    level: L4
+    description: Microwave class concept.
+    children:
+      - kitchen_appliance_structure
+
+  - id: oven
+    name: oven
+    level: L4
+    description: Oven class concept.
+    children:
+      - kitchen_appliance_structure
+
+  - id: toaster
+    name: toaster
+    level: L4
+    description: Toaster class concept.
+    children:
+      - kitchen_appliance_structure
+
+  - id: sink
+    name: sink
+    level: L4
+    description: Sink class concept.
+    children:
+      - sanitary_fixture_structure
+
+  - id: refrigerator
+    name: refrigerator
+    level: L4
+    description: Refrigerator class concept.
+    children:
+      - kitchen_appliance_structure
+
+  - id: book
+    name: book
+    level: L4
+    description: Book class concept.
+    children:
+      - reading_object_structure
+
+  - id: clock
+    name: clock
+    level: L4
+    description: Clock class concept.
+    children:
+      - clock_face
+
+  - id: vase
+    name: vase
+    level: L4
+    description: Vase class concept.
+    children:
+      - decorative_object_structure
+      - drink_container_structure
+
+  - id: scissors
+    name: scissors
+    level: L4
+    description: Scissors class concept.
+    children:
+      - utensil_structure
+
+  - id: teddy_bear
+    name: teddy bear
+    level: L4
+    description: Teddy bear class concept.
+    children:
+      - soft_body_region
+      - animal_body_configuration
+
+  - id: hair_drier
+    name: hair drier
+    level: L4
+    description: Hair drier class concept.
+    children:
+      - grooming_tool_structure
+
+  - id: toothbrush
+    name: toothbrush
+    level: L4
+    description: Toothbrush class concept.
+    children:
+      - grooming_tool_structure

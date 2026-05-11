@@ -10,7 +10,7 @@ if str(ROOT) not in sys.path:
 try:
     from .run_audit import main
 except ImportError:
-    from tools.audit_caps.unsupervised.run_audit import main
+    from tools.audit_caps.unsupervised_audit.run_audit import main
 
 
 if __name__ == "__main__":

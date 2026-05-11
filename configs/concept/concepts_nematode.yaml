@@ -1,0 +1,254 @@
+meta:
+  dataset: nematode
+  version: v2
+  description: Compact hierarchical concept definitions for supervised audit.
+
+levels:
+  - id: L1
+    name: primitive
+    description: Low-level visual primitives.
+  - id: L2
+    name: local_structure
+    description: Local organism structures.
+  - id: L3
+    name: semantic_pattern
+    description: Discriminative organism patterns.
+  - id: L4
+    name: class_concept
+    description: Final class concepts.
+
+level_concepts:
+  L1:
+    oval_boundary: pixel
+    elongated_boundary: pixel
+    tapered_end: pixel
+    granular_interior: pixel
+    dark_inner_patch: pixel
+    layered_shell_edge: pixel
+  L2:
+    cyst_shell: pixel
+    packed_interior: pixel
+    stylet_head: pixel
+    swollen_midbody: pixel
+    slender_midbody: pixel
+    dark_midbody: pixel
+    tapered_tail: pixel
+    curved_worm_body: pixel
+  L3:
+    cyst_with_packed_interior: instance
+    rounded_cyst_shell_pattern: instance
+    stylet_head_swollen_body: instance
+    curved_body_dark_midbody: instance
+    stylet_head_slender_body: instance
+    curved_body_tapered_tail: instance
+    slender_body_tapered_tail: instance
+  L4:
+    meloidogyne_hapla: instance
+    pcn_cyst: instance
+    globodera_pallida: instance
+    pratylenchus: instance
+    ditylenchus: instance
+    pcn: instance
+
+concepts:
+  - id: oval_boundary
+    name: oval boundary
+    level: L1
+    description: A closed oval-like boundary.
+    children: []
+
+  - id: elongated_boundary
+    name: elongated boundary
+    level: L1
+    description: A long narrow outer boundary.
+    children: []
+
+  - id: tapered_end
+    name: tapered end
+    level: L1
+    description: A narrow tapered terminal region.
+    children: []
+
+  - id: granular_interior
+    name: granular interior
+    level: L1
+    description: A grainy internal texture region.
+    children: []
+
+  - id: dark_inner_patch
+    name: dark inner patch
+    level: L1
+    description: A locally darker internal region.
+    children: []
+
+  - id: layered_shell_edge
+    name: layered shell edge
+    level: L1
+    description: A banded or layered outer shell edge.
+    children: []
+
+  - id: cyst_shell
+    name: cyst shell
+    level: L2
+    description: A rounded shell-like boundary of a cyst-stage nematode.
+    children:
+      - oval_boundary
+      - layered_shell_edge
+
+  - id: packed_interior
+    name: packed interior
+    level: L2
+    description: A densely packed granular internal region.
+    children:
+      - granular_interior
+      - dark_inner_patch
+
+  - id: stylet_head
+    name: stylet head
+    level: L2
+    description: A narrow anterior head-side tip-like region.
+    children:
+      - tapered_end
+      - elongated_boundary
+
+  - id: swollen_midbody
+    name: swollen midbody
+    level: L2
+    description: A locally swollen central body region.
+    children:
+      - oval_boundary
+      - dark_inner_patch
+
+  - id: slender_midbody
+    name: slender midbody
+    level: L2
+    description: A long narrow central body region.
+    children:
+      - elongated_boundary
+
+  - id: dark_midbody
+    name: dark midbody
+    level: L2
+    description: A darker elongated central body region in an adult nematode.
+    children:
+      - dark_inner_patch
+      - elongated_boundary
+
+  - id: tapered_tail
+    name: tapered tail
+    level: L2
+    description: A narrow tapered posterior tail-like region.
+    children:
+      - tapered_end
+      - elongated_boundary
+
+  - id: curved_worm_body
+    name: curved worm body
+    level: L2
+    description: A curved elongated worm-like body.
+    children:
+      - elongated_boundary
+
+  - id: cyst_with_packed_interior
+    name: cyst with packed interior
+    level: L3
+    description: A cyst-like body with dense internal granular structure.
+    children:
+      - cyst_shell
+      - packed_interior
+
+  - id: rounded_cyst_shell_pattern
+    name: rounded cyst shell pattern
+    level: L3
+    description: A rounded cyst-like body dominated by a visible shell boundary.
+    children:
+      - cyst_shell
+
+  - id: stylet_head_swollen_body
+    name: stylet head swollen body
+    level: L3
+    description: An adult nematode pattern with a pointed anterior head and a swollen central body.
+    children:
+      - stylet_head
+      - swollen_midbody
+      - curved_worm_body
+
+  - id: curved_body_dark_midbody
+    name: curved body dark midbody
+    level: L3
+    description: A curved adult worm body with a darker elongated midbody region.
+    children:
+      - curved_worm_body
+      - dark_midbody
+
+  - id: stylet_head_slender_body
+    name: stylet head slender body
+    level: L3
+    description: An adult nematode pattern with a pointed head and a slender elongated body.
+    children:
+      - stylet_head
+      - slender_midbody
+
+  - id: curved_body_tapered_tail
+    name: curved body tapered tail
+    level: L3
+    description: A curved adult worm body with a visibly tapered posterior tail.
+    children:
+      - curved_worm_body
+      - tapered_tail
+
+  - id: slender_body_tapered_tail
+    name: slender body tapered tail
+    level: L3
+    description: A slender midbody with a narrow tapered tail region.
+    children:
+      - slender_midbody
+      - tapered_tail
+
+  - id: meloidogyne_hapla
+    name: Meloidogyne hapla
+    level: L4
+    description: Meloidogyne hapla class concept.
+    children:
+      - stylet_head_swollen_body
+      - curved_body_tapered_tail
+
+  - id: pcn_cyst
+    name: PCN Cyst
+    level: L4
+    description: PCN Cyst class concept.
+    children:
+      - cyst_with_packed_interior
+      - rounded_cyst_shell_pattern
+
+  - id: globodera_pallida
+    name: Globodera pallida
+    level: L4
+    description: Globodera pallida adult class concept.
+    children:
+      - curved_body_dark_midbody
+      - stylet_head_slender_body
+
+  - id: pratylenchus
+    name: Pratylenchus
+    level: L4
+    description: Pratylenchus class concept.
+    children:
+      - stylet_head_slender_body
+      - slender_body_tapered_tail
+
+  - id: ditylenchus
+    name: Ditylenchus
+    level: L4
+    description: Ditylenchus class concept.
+    children:
+      - slender_body_tapered_tail
+      - curved_body_tapered_tail
+
+  - id: pcn
+    name: PCN
+    level: L4
+    description: PCN adult class concept.
+    children:
+      - curved_body_tapered_tail
+      - curved_body_dark_midbody

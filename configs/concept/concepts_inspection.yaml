@@ -1,0 +1,234 @@
+meta:
+  dataset: inspection
+  version: v2
+  description: Compact hierarchical concept definitions for supervised audit.
+
+levels:
+  - id: L1
+    name: primitive
+    description: Low-level visual primitives.
+  - id: L2
+    name: local_structure
+    description: Local defect structures.
+  - id: L3
+    name: semantic_pattern
+    description: Discriminative defect patterns.
+  - id: L4
+    name: class_concept
+    description: Final class concepts.
+
+level_concepts:
+  L1:
+    dark_line: pixel
+    dark_spot: pixel
+    rough_edge: pixel
+    broken_edge: pixel
+    rough_texture: pixel
+    wavy_surface: pixel
+  L2:
+    circular_pit: pixel
+    elongated_crack: pixel
+    branching_crack: pixel
+    frayed_boundary: pixel
+    rough_surface_patch: pixel
+    raised_uneven_patch: pixel
+  L3:
+    material_loss_pattern: instance
+    linear_separation_pattern: instance
+    branching_line_pattern: instance
+    boundary_damage_pattern: instance
+    texture_anomaly_pattern: instance
+    height_variation_pattern: instance
+    normal_surface_pattern: image
+  L4:
+    MT_Blowhole: instance
+    MT_Break: instance
+    MT_Crack: instance
+    MT_Fray: instance
+    MT_Uneven: instance
+    MT_Free: image
+
+concepts:
+  - id: dark_line
+    name: dark line
+    level: L1
+    description: A narrow dark linear trace.
+    children: []
+
+  - id: dark_spot
+    name: dark spot
+    level: L1
+    description: A small dark local spot or depression.
+    children: []
+
+  - id: rough_edge
+    name: rough edge
+    level: L1
+    description: An irregular coarse boundary.
+    children: []
+
+  - id: broken_edge
+    name: broken edge
+    level: L1
+    description: A fragmented or missing boundary piece.
+    children: []
+
+  - id: rough_texture
+    name: rough texture
+    level: L1
+    description: A granular or coarse damaged local texture.
+    children: []
+
+  - id: wavy_surface
+    name: wavy surface
+    level: L1
+    description: A local trace of surface waviness or height change.
+    children: []
+
+  - id: circular_pit
+    name: circular pit
+    level: L2
+    description: A localized round cavity-like defect.
+    children:
+      - dark_spot
+      - rough_edge
+
+  - id: elongated_crack
+    name: elongated crack
+    level: L2
+    description: A long narrow crack or material split.
+    children:
+      - dark_line
+      - broken_edge
+
+  - id: branching_crack
+    name: branching crack
+    level: L2
+    description: A crack structure with visible branches.
+    children:
+      - dark_line
+      - rough_edge
+
+  - id: frayed_boundary
+    name: frayed boundary
+    level: L2
+    description: A ragged and damaged boundary edge.
+    children:
+      - rough_edge
+      - broken_edge
+
+  - id: rough_surface_patch
+    name: rough surface patch
+    level: L2
+    description: A localized rough damaged surface patch.
+    children:
+      - rough_texture
+      - dark_spot
+
+  - id: raised_uneven_patch
+    name: raised uneven patch
+    level: L2
+    description: A local region with visible uneven surface shape.
+    children:
+      - wavy_surface
+      - rough_texture
+
+  - id: material_loss_pattern
+    name: material loss pattern
+    level: L3
+    description: A defect pattern indicating missing or depressed local material.
+    children:
+      - circular_pit
+      - rough_surface_patch
+
+  - id: linear_separation_pattern
+    name: linear separation pattern
+    level: L3
+    description: A defect pattern marked by a long split or separation line.
+    children:
+      - elongated_crack
+      - frayed_boundary
+
+  - id: branching_line_pattern
+    name: branching line pattern
+    level: L3
+    description: A defect pattern with branching or propagating thin lines.
+    children:
+      - branching_crack
+      - elongated_crack
+
+  - id: boundary_damage_pattern
+    name: boundary damage pattern
+    level: L3
+    description: A defect pattern concentrated around damaged or broken boundaries.
+    children:
+      - frayed_boundary
+      - elongated_crack
+
+  - id: texture_anomaly_pattern
+    name: texture anomaly pattern
+    level: L3
+    description: A defect pattern marked by rough local surface texture.
+    children:
+      - rough_surface_patch
+
+  - id: height_variation_pattern
+    name: height variation pattern
+    level: L3
+    description: A defect pattern marked by raised, depressed, or wavy surface changes.
+    children:
+      - raised_uneven_patch
+      - circular_pit
+
+  - id: normal_surface_pattern
+    name: normal surface pattern
+    level: L3
+    description: A visually intact surface without obvious defect structure.
+    children: []
+
+  - id: MT_Blowhole
+    name: MT_Blowhole
+    level: L4
+    description: Blowhole class concept.
+    children:
+      - material_loss_pattern
+      - height_variation_pattern
+
+  - id: MT_Break
+    name: MT_Break
+    level: L4
+    description: Break class concept.
+    children:
+      - linear_separation_pattern
+      - boundary_damage_pattern
+
+  - id: MT_Crack
+    name: MT_Crack
+    level: L4
+    description: Crack class concept.
+    children:
+      - branching_line_pattern
+      - linear_separation_pattern
+
+  - id: MT_Fray
+    name: MT_Fray
+    level: L4
+    description: Fray class concept.
+    children:
+      - boundary_damage_pattern
+      - texture_anomaly_pattern
+
+  - id: MT_Uneven
+    name: MT_Uneven
+    level: L4
+    description: Uneven class concept.
+    children:
+      - height_variation_pattern
+      - texture_anomaly_pattern
+
+  - id: MT_Free
+    name: MT_Free
+    level: L4
+    description: Free class concept.
+    children:
+      - normal_surface_pattern

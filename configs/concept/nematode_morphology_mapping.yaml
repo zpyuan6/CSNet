@@ -1,0 +1,144 @@
+meta:
+  dataset: nematode
+  version: v1
+  description: Mapping from current nematode concept ids to more morphology-oriented terminology.
+
+mapping:
+  oval_boundary:
+    current_name: oval boundary
+    morphology_term: oval body outline
+    morphology_type: shape
+    note: Describes a rounded or oval external outline, commonly used for cyst-like forms.
+
+  elongated_boundary:
+    current_name: elongated boundary
+    morphology_term: elongated body outline
+    morphology_type: shape
+    note: Describes a long, slender external outline typical of adult nematodes.
+
+  tapered_end:
+    current_name: tapered end
+    morphology_term: terminal taper
+    morphology_type: endpoint_shape
+    note: Describes narrowing at one body end without specifying head or tail.
+
+  granular_interior:
+    current_name: granular interior
+    morphology_term: granular internal contents
+    morphology_type: internal_texture
+    note: Refers to visibly granular internal material.
+
+  dark_inner_patch:
+    current_name: dark inner patch
+    morphology_term: dark internal region
+    morphology_type: internal_texture
+    note: Refers to a darker internal area within the body.
+
+  layered_shell_edge:
+    current_name: layered shell edge
+    morphology_term: layered cyst wall
+    morphology_type: wall_structure
+    note: Refers to a banded outer wall pattern typical of cyst morphology.
+
+  cyst_shell:
+    current_name: cyst shell
+    morphology_term: cyst wall
+    morphology_type: cyst_structure
+    note: Morphology-oriented name for the visible shell or wall of a cyst.
+
+  packed_interior:
+    current_name: packed interior
+    morphology_term: dense internal contents
+    morphology_type: internal_structure
+    note: Refers to densely packed internal material inside the body or cyst.
+
+  stylet_head:
+    current_name: stylet head
+    morphology_term: stylet-bearing anterior
+    morphology_type: anterior_structure
+    note: Describes the anterior region associated with a stylet-like head structure.
+
+  swollen_midbody:
+    current_name: swollen midbody
+    morphology_term: expanded midbody
+    morphology_type: body_proportion
+    note: Refers to enlargement or widening of the midbody region.
+
+  slender_midbody:
+    current_name: slender midbody
+    morphology_term: slender midbody region
+    morphology_type: body_proportion
+    note: Refers to a narrow elongated midbody.
+
+  dark_midbody:
+    current_name: dark midbody
+    morphology_term: darkened midbody region
+    morphology_type: body_texture
+    note: Refers to a darker central body region in an adult nematode.
+
+  tapered_tail:
+    current_name: tapered tail
+    morphology_term: tapered posterior tail
+    morphology_type: posterior_structure
+    note: Refers to a narrow and progressively tapering tail.
+
+  curved_worm_body:
+    current_name: curved worm body
+    morphology_term: curved adult body
+    morphology_type: whole_body_posture
+    note: Refers to overall curvature of an adult nematode body.
+
+  cyst_with_packed_interior:
+    current_name: cyst with packed interior
+    morphology_term: cyst with dense internal contents
+    morphology_type: cyst_pattern
+    note: A cyst morphology combining a visible cyst wall and dense internal material.
+
+  rounded_cyst_shell_pattern:
+    current_name: rounded cyst shell pattern
+    morphology_term: rounded cyst wall pattern
+    morphology_type: cyst_pattern
+    note: A rounded cyst morphology dominated by wall visibility.
+
+  stylet_head_swollen_body:
+    current_name: stylet head swollen body
+    morphology_term: stylet-bearing anterior with expanded midbody
+    morphology_type: adult_pattern
+    note: Adult morphology combining an anterior stylet region with midbody expansion.
+
+  curved_body_dark_midbody:
+    current_name: curved body dark midbody
+    morphology_term: curved body with darkened midbody
+    morphology_type: adult_pattern
+    note: Adult morphology defined by body curvature and a darker midbody region.
+
+  stylet_head_slender_body:
+    current_name: stylet head slender body
+    morphology_term: stylet-bearing anterior with slender body
+    morphology_type: adult_pattern
+    note: Adult morphology combining a stylet-like anterior and narrow elongated body.
+
+  curved_body_tapered_tail:
+    current_name: curved body tapered tail
+    morphology_term: curved body with tapered tail
+    morphology_type: adult_pattern
+    note: Adult morphology combining whole-body curvature with posterior taper.
+
+  slender_body_tapered_tail:
+    current_name: slender body tapered tail
+    morphology_term: slender body with tapered tail
+    morphology_type: adult_pattern
+    note: Adult morphology combining a slender body with a tapered posterior tail.
+
+continuous_candidates:
+  - concept_id: curved_worm_body
+    morphology_term: body curvature
+    rationale: Better interpreted as degree of whole-body curvature than as a binary label.
+
+  - concept_id: swollen_midbody
+    morphology_term: midbody expansion degree
+    rationale: Better interpreted as degree of midbody enlargement than as a binary label.
+
+  - concept_id: tapered_tail
+    morphology_term: tail taper degree
+    rationale: Better interpreted as degree of posterior taper than as a binary label.

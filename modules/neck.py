@@ -24,11 +24,12 @@ from __future__ import annotations
 from typing import List, Optional, Tuple, Union
 
 import math
+import time
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ultralytics.nn.modules import C3k2, Conv
+from ultralytics.nn.modules import C3k2, Conv, DWConv
 
 
 # -------------------------
@@ -235,6 +236,47 @@ class SelfRouting(nn.Module):
         return out
 
 
+class HybridRoute1(nn.Module):
+    """Conv-heavy replacement for SelfRouting with lightweight capsule-aware gating."""
+
+    def __init__(self, K_in: int, P_in: int, K_out: int, P_out: int):
+        super().__init__()
+        self.K_in = int(K_in)
+        self.P_in = int(P_in)
+        self.K_out = int(K_out)
+        self.P_out = int(P_out)
+        self.c_in = self.K_in * (self.P_in + 1)
+        self.c_out = self.K_out * (self.P_out + 1)
+
+        pose_in = self.K_in * self.P_in
+        pose_out = self.K_out * self.P_out
+        vote_groups = math.gcd(self.K_in, self.K_out)
+        vote_groups = max(int(vote_groups), 1)
+        self.vote_proj = Conv(pose_in, pose_out, 1, 1, g=vote_groups)
+        self.gate_proj = nn.Conv2d(self.c_in, self.K_out, kernel_size=1, stride=1, padding=0, bias=True)
+        self.act_proj = nn.Conv2d(self.K_in, self.K_out, kernel_size=1, stride=1, padding=0, bias=True)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.ndim != 4:
+            raise TypeError(f'HybridRoute1 expects [B,C,H,W], got {tuple(x.shape)}')
+
+        b, c, h, w = x.shape
+        if c != self.c_in:
+            raise ValueError(f'HybridRoute1 expected C={self.c_in}, got C={c}')
+
+        x_caps = x.reshape(b, self.K_in, self.P_in + 1, h, w)
+        pose = x_caps[:, :, :self.P_in].reshape(b, self.K_in * self.P_in, h, w)
+        act = x_caps[:, :, self.P_in].contiguous()
+
+        pose_votes = self.vote_proj(pose).reshape(b, self.K_out, self.P_out, h, w)
+        gate = self.gate_proj(x).sigmoid().unsqueeze(2)
+        pose_out = pose_votes * gate
+
+        act_out = self.act_proj(act).sigmoid().unsqueeze(2)
+        out = torch.cat([pose_out, act_out], dim=2).reshape(b, self.c_out, h, w)
+        return out
+
+
 class CapsRoute(nn.Module):
     """Capsule routing fusion by direct capsule concatenation.
 
@@ -338,6 +380,16 @@ class CapsRoutev2(CapsRoute):
     ):
         super().__init__(K_in, P_in, K_out, P_out, kernel_size, pre_k, post_k, pre_groups, post_groups)
         _ = (post_k, post_groups, pre_k, pre_groups)  # kept for YAML/API compatibility
+        self.profile_route = False
+        self._route_profile = {
+            'cat_ms': 0.0,
+            'conv_route_ms': 0.0,
+            'route1_ms': 0.0,
+            'pose_refine_ms': 0.0,
+            'act_from_pose_ms': 0.0,
+            'pack_ms': 0.0,
+            'calls': 0.0,
+        }
 
         deep_stage = self.K_out >= 64
         pose_ch = self.K_out * self.P_out
@@ -358,6 +410,52 @@ class CapsRoutev2(CapsRoute):
         self.act_from_pose = Conv(pose_ch, self.K_out, 1, 1, g=self.K_out)
         self.act_alpha = nn.Parameter(torch.tensor(0.1))
 
+    @staticmethod
+    def _sync_profile() -> None:
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+
+    def _ensure_route_profile_state(self) -> None:
+        if not hasattr(self, "profile_route"):
+            self.profile_route = False
+        if not hasattr(self, "_route_profile"):
+            self._route_profile = {
+                'cat_ms': 0.0,
+                'conv_route_ms': 0.0,
+                'route1_ms': 0.0,
+                'pose_refine_ms': 0.0,
+                'act_from_pose_ms': 0.0,
+                'pack_ms': 0.0,
+                'calls': 0.0,
+            }
+
+    def reset_route_profile(self) -> None:
+        self._ensure_route_profile_state()
+        for k in self._route_profile:
+            self._route_profile[k] = 0.0
+
+    def get_route_profile(self) -> dict:
+        self._ensure_route_profile_state()
+        calls = max(float(self._route_profile.get('calls', 0.0)), 1.0)
+        total = (
+            self._route_profile['cat_ms']
+            + self._route_profile['conv_route_ms']
+            + self._route_profile['route1_ms']
+            + self._route_profile['pose_refine_ms']
+            + self._route_profile['act_from_pose_ms']
+            + self._route_profile['pack_ms']
+        )
+        out = dict(self._route_profile)
+        out['total_ms'] = total
+        out['cat_avg_ms'] = self._route_profile['cat_ms'] / calls
+        out['conv_route_avg_ms'] = self._route_profile['conv_route_ms'] / calls
+        out['route1_avg_ms'] = self._route_profile['route1_ms'] / calls
+        out['pose_refine_avg_ms'] = self._route_profile['pose_refine_ms'] / calls
+        out['act_from_pose_avg_ms'] = self._route_profile['act_from_pose_ms'] / calls
+        out['pack_avg_ms'] = self._route_profile['pack_ms'] / calls
+        out['total_avg_ms'] = total / calls
+        return out
+
     def forward(self, xs: Union[List[torch.Tensor], Tuple[torch.Tensor, ...]]) -> torch.Tensor:
         if not isinstance(xs, (list, tuple)):
             raise TypeError(f'CapsRoutev2 expects list/tuple inputs, got {type(xs)}')
@@ -374,8 +472,27 @@ class CapsRoutev2(CapsRoute):
                 raise ValueError('CapsRoutev2 inputs must share H,W. Use CapsAlign before routing.')
             cat_parts.append(x)
 
-        x_cat = torch.cat(cat_parts, dim=1)  # [B, K_cat*(P+1), H, W]
-        routed = self.route1(self.conv_route(x_cat))  # [B, K_out*(P_out+1), H, W]
+        self._ensure_route_profile_state()
+        if getattr(self, "profile_route", False):
+            self._route_profile['calls'] += 1.0
+            self._sync_profile()
+            t0 = time.perf_counter()
+            x_cat = torch.cat(cat_parts, dim=1)  # [B, K_cat*(P+1), H, W]
+            self._sync_profile()
+            self._route_profile['cat_ms'] += (time.perf_counter() - t0) * 1000.0
+
+            t0 = time.perf_counter()
+            conv_out = self.conv_route(x_cat)
+            self._sync_profile()
+            self._route_profile['conv_route_ms'] += (time.perf_counter() - t0) * 1000.0
+
+            t0 = time.perf_counter()
+            routed = self.route1(conv_out)  # [B, K_out*(P_out+1), H, W]
+            self._sync_profile()
+            self._route_profile['route1_ms'] += (time.perf_counter() - t0) * 1000.0
+        else:
+            x_cat = torch.cat(cat_parts, dim=1)  # [B, K_cat*(P+1), H, W]
+            routed = self.route1(self.conv_route(x_cat))  # [B, K_out*(P_out+1), H, W]
 
         b, _, _, _ = routed.shape
         # Packed layout by type: [pose(P), act(1)] repeated K times.
@@ -385,18 +502,213 @@ class CapsRoutev2(CapsRoute):
 
         # Grouped pose refinement across type blocks (equivalent to per-type grouped processing).
         pose_flat = pose.reshape(b, self.K_out * self.P_out, h, w)
-        pose_flat = self.pose_refine(pose_flat)
-        act_delta = self.act_from_pose(pose_flat)
-        act_final = act + act_delta
+        if getattr(self, "profile_route", False):
+            t0 = time.perf_counter()
+            pose_flat = self.pose_refine(pose_flat)
+            self._sync_profile()
+            self._route_profile['pose_refine_ms'] += (time.perf_counter() - t0) * 1000.0
 
-        pose_pack = pose_flat.reshape(b, self.K_out, self.P_out, h, w)
-        out = torch.cat([pose_pack, act_final.unsqueeze(2)], dim=2).reshape(b, self.c_out, h, w)
+            t0 = time.perf_counter()
+            act_delta = self.act_from_pose(pose_flat)
+            act_final = act + act_delta
+            self._sync_profile()
+            self._route_profile['act_from_pose_ms'] += (time.perf_counter() - t0) * 1000.0
+        else:
+            pose_flat = self.pose_refine(pose_flat)
+            act_delta = self.act_from_pose(pose_flat)
+            act_final = act + act_delta
+
+        if getattr(self, "profile_route", False):
+            t0 = time.perf_counter()
+            pose_pack = pose_flat.reshape(b, self.K_out, self.P_out, h, w)
+            out = torch.cat([pose_pack, act_final.unsqueeze(2)], dim=2).reshape(b, self.c_out, h, w)
+            self._sync_profile()
+            self._route_profile['pack_ms'] += (time.perf_counter() - t0) * 1000.0
+        else:
+            pose_pack = pose_flat.reshape(b, self.K_out, self.P_out, h, w)
+            out = torch.cat([pose_pack, act_final.unsqueeze(2)], dim=2).reshape(b, self.c_out, h, w)
         return out
 
 
 # -------------------------
 # 4) CapsDecode
 # -------------------------
+
+class CapsRoutev3(CapsRoute):
+    """CapsRoute with DS-style lightweight pose refinement and act residual update."""
+
+    def __init__(
+        self,
+        K_in: Union[List[int], Tuple[int, ...]],
+        P_in: Union[List[int], Tuple[int, ...]],
+        K_out: int,
+        P_out: int,
+        kernel_size: int = 3,
+        pre_k: int = 3,
+        post_k: int = 3,
+        pre_groups: Optional[int] = None,
+        post_groups: Optional[int] = None,
+    ):
+        super().__init__(K_in, P_in, K_out, P_out, kernel_size, pre_k, post_k, pre_groups, post_groups)
+        _ = (post_k, post_groups, pre_k, pre_groups)
+        self.profile_route = False
+        self._route_profile = {
+            'cat_ms': 0.0,
+            'conv_route_ms': 0.0,
+            'route1_ms': 0.0,
+            'pose_refine_ms': 0.0,
+            'act_from_pose_ms': 0.0,
+            'pack_ms': 0.0,
+            'calls': 0.0,
+        }
+
+        pose_ch = self.K_out * self.P_out
+        # Keep refinement fully type-grouped to preserve capsule semantics:
+        # each capsule type only mixes its own pose channels.
+        self.pose_refine = nn.Sequential(
+            Conv(pose_ch, pose_ch, 1, 1, g=self.K_out),
+            Conv(pose_ch, pose_ch, 3, 1, g=self.K_out),
+            Conv(pose_ch, pose_ch, 1, 1, g=self.K_out),
+        )
+        self.act_from_pose = Conv(pose_ch, self.K_out, 1, 1, g=self.K_out)
+        self.act_alpha = nn.Parameter(torch.tensor(0.1))
+
+    @staticmethod
+    def _sync_profile() -> None:
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+
+    def _ensure_route_profile_state(self) -> None:
+        if not hasattr(self, "profile_route"):
+            self.profile_route = False
+        if not hasattr(self, "_route_profile"):
+            self._route_profile = {
+                'cat_ms': 0.0,
+                'conv_route_ms': 0.0,
+                'route1_ms': 0.0,
+                'pose_refine_ms': 0.0,
+                'act_from_pose_ms': 0.0,
+                'pack_ms': 0.0,
+                'calls': 0.0,
+            }
+
+    def reset_route_profile(self) -> None:
+        self._ensure_route_profile_state()
+        for k in self._route_profile:
+            self._route_profile[k] = 0.0
+
+    def get_route_profile(self) -> dict:
+        self._ensure_route_profile_state()
+        calls = max(float(self._route_profile.get('calls', 0.0)), 1.0)
+        total = (
+            self._route_profile['cat_ms']
+            + self._route_profile['conv_route_ms']
+            + self._route_profile['route1_ms']
+            + self._route_profile['pose_refine_ms']
+            + self._route_profile['act_from_pose_ms']
+            + self._route_profile['pack_ms']
+        )
+        out = dict(self._route_profile)
+        out['total_ms'] = total
+        out['cat_avg_ms'] = self._route_profile['cat_ms'] / calls
+        out['conv_route_avg_ms'] = self._route_profile['conv_route_ms'] / calls
+        out['route1_avg_ms'] = self._route_profile['route1_ms'] / calls
+        out['pose_refine_avg_ms'] = self._route_profile['pose_refine_ms'] / calls
+        out['act_from_pose_avg_ms'] = self._route_profile['act_from_pose_ms'] / calls
+        out['pack_avg_ms'] = self._route_profile['pack_ms'] / calls
+        out['total_avg_ms'] = total / calls
+        return out
+
+    def forward(self, xs: Union[List[torch.Tensor], Tuple[torch.Tensor, ...]]) -> torch.Tensor:
+        if not isinstance(xs, (list, tuple)):
+            raise TypeError(f'CapsRoutev3 expects list/tuple inputs, got {type(xs)}')
+        if len(xs) != self.num_sources:
+            raise ValueError(f'CapsRoutev3 expected {self.num_sources} sources, got {len(xs)}')
+
+        h, w = int(xs[0].shape[-2]), int(xs[0].shape[-1])
+        cat_parts = []
+        for i, x in enumerate(xs):
+            expected_c = self.K_in_list[i] * (self.P_in_list[i] + 1)
+            if int(x.shape[1]) != expected_c:
+                raise ValueError(f'CapsRoutev3 source-{i} expected C={expected_c}, got C={int(x.shape[1])}')
+            if int(x.shape[-2]) != h or int(x.shape[-1]) != w:
+                raise ValueError('CapsRoutev3 inputs must share H,W. Use CapsAlign before routing.')
+            cat_parts.append(x)
+
+        self._ensure_route_profile_state()
+        if getattr(self, "profile_route", False):
+            self._route_profile['calls'] += 1.0
+            self._sync_profile()
+            t0 = time.perf_counter()
+            x_cat = torch.cat(cat_parts, dim=1)
+            self._sync_profile()
+            self._route_profile['cat_ms'] += (time.perf_counter() - t0) * 1000.0
+
+            t0 = time.perf_counter()
+            conv_out = self.conv_route(x_cat)
+            self._sync_profile()
+            self._route_profile['conv_route_ms'] += (time.perf_counter() - t0) * 1000.0
+
+            t0 = time.perf_counter()
+            routed = self.route1(conv_out)
+            self._sync_profile()
+            self._route_profile['route1_ms'] += (time.perf_counter() - t0) * 1000.0
+        else:
+            x_cat = torch.cat(cat_parts, dim=1)
+            routed = self.route1(self.conv_route(x_cat))
+
+        b, _, _, _ = routed.shape
+        caps = routed.reshape(b, self.K_out, self.P_out + 1, h, w)
+        pose = caps[:, :, :self.P_out].contiguous()
+        act = caps[:, :, self.P_out].contiguous()
+
+        pose_flat = pose.reshape(b, self.K_out * self.P_out, h, w)
+        if getattr(self, "profile_route", False):
+            t0 = time.perf_counter()
+            pose_flat = pose_flat + self.pose_refine(pose_flat)
+            self._sync_profile()
+            self._route_profile['pose_refine_ms'] += (time.perf_counter() - t0) * 1000.0
+
+            t0 = time.perf_counter()
+            act_delta = self.act_from_pose(pose_flat)
+            act_final = act + act_delta
+            self._sync_profile()
+            self._route_profile['act_from_pose_ms'] += (time.perf_counter() - t0) * 1000.0
+        else:
+            pose_flat = pose_flat + self.pose_refine(pose_flat)
+            act_delta = self.act_from_pose(pose_flat)
+            act_final = act + act_delta
+
+        if getattr(self, "profile_route", False):
+            t0 = time.perf_counter()
+            pose_pack = pose_flat.reshape(b, self.K_out, self.P_out, h, w)
+            out = torch.cat([pose_pack, act_final.unsqueeze(2)], dim=2).reshape(b, self.c_out, h, w)
+            self._sync_profile()
+            self._route_profile['pack_ms'] += (time.perf_counter() - t0) * 1000.0
+        else:
+            pose_pack = pose_flat.reshape(b, self.K_out, self.P_out, h, w)
+        out = torch.cat([pose_pack, act_final.unsqueeze(2)], dim=2).reshape(b, self.c_out, h, w)
+        return out
+
+
+class CapsRoutev4(CapsRoutev2):
+    """CapsRoutev2 with conv-heavy HybridRoute1 to reduce routing overhead."""
+
+    def __init__(
+        self,
+        K_in: Union[List[int], Tuple[int, ...]],
+        P_in: Union[List[int], Tuple[int, ...]],
+        K_out: int,
+        P_out: int,
+        kernel_size: int = 3,
+        pre_k: int = 3,
+        post_k: int = 3,
+        pre_groups: Optional[int] = None,
+        post_groups: Optional[int] = None,
+    ):
+        super().__init__(K_in, P_in, K_out, P_out, kernel_size, pre_k, post_k, pre_groups, post_groups)
+        self.route1 = HybridRoute1(K_in=self.K_cat, P_in=self.P_cat, K_out=self.K_out, P_out=self.P_out)
+
 
 class CapsDecode(nn.Module):
     """

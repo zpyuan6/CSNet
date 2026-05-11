@@ -1,0 +1,26 @@
+# Capsule OVD mixed-data config aligned with YOLO-World / YOLOE-style training.
+# Uses local data under C:/Datasets and the official Ultralytics dataset yamls
+# for Objects365 and LVIS class definitions.
+#
+# Data status on this machine:
+# - C:/Datasets/Objects365      downloading/preparing
+# - C:/Datasets/lvis            ready
+# - C:/Datasets/flickr30k       downloading
+# - C:/Datasets/GQA             downloading
+#
+# Before training, ensure the grounding annotation JSON files exist at:
+# - C:/Datasets/flickr30k/final_flickr_separateGT_train.json
+# - C:/Datasets/GQA/final_mixed_train_no_coco.json
+
+train:
+  yolo_data:
+    - configs/data/Objects365_local.yaml
+  grounding_data:
+    - img_path: C:/Datasets/flickr30k/flickr30k-images
+      json_file: C:/Datasets/flickr30k/final_flickr_separateGT_train.json
+    - img_path: C:/Datasets/GQA/images
+      json_file: C:/Datasets/GQA/final_mixed_train_no_coco.json
+
+val:
+  yolo_data:
+    - configs/data/lvis_local.yaml

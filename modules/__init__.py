@@ -15,17 +15,23 @@ from .head import (
     CapsuleDetectv5,
     CapsuleDetectv6,
     CapsuleDetectv7,
+    CapsuleDetectv8,
+    CapsuleOpenVocabDetect,
+    CapsuleOpenVocabDetectV2,
     CapsuleDualHead,
     CapsuleSegmentv1,
     CapsuleSegmentv2,
+    CapsuleSegmentv3,
 )
-from .neck import CapsAlign, CapsDecode, CapsProj, CapsRoute, CapsRoutev2, CapsuleTap
+from .neck import CapsAlign, CapsDecode, CapsProj, CapsRoute, CapsRoutev2, CapsRoutev3, CapsRoutev4, CapsuleTap
 
 __all__ = [
     "CapsuleBackbone",
     "CapsuleTap",
     "CapsRoute",
     "CapsRoutev2",
+    "CapsRoutev3",
+    "CapsRoutev4",
     "CapsProj",
     "CapsDecode",
     "CapsAlign",
@@ -36,8 +42,12 @@ __all__ = [
     "CapsuleDetectv5",
     "CapsuleDetectv6",
     "CapsuleDetectv7",
+    "CapsuleDetectv8",
+    "CapsuleOpenVocabDetect",
+    "CapsuleOpenVocabDetectV2",
     "CapsuleSegmentv1",
     "CapsuleSegmentv2",
+    "CapsuleSegmentv3",
     "CapsuleDualHead",
     "ConvBNAct",
     "DeformableCaps2d",

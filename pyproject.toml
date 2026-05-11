@@ -6,43 +6,20 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "fiftyone>=1.11.1",
+    "langchain>=1.2.15",
+    "langchain-openai>=1.1.12",
+    "mobileclip",
+    "numpy>=2.4.4",
     "torch>=2.7.0",
     "torchvision>=0.21.0",
+    "transformers>=5.5.0",
     "ultralytics>=8.4.9",
 ]
 
-[project.optional-dependencies]
-cu118 = [
-    "torch",
-    "torchvision",
-]
-cu128 = [
-    "torch",
-    "torchvision",
-]
-
-[tool.uv]
-conflicts = [
-  [
-    { extra = "cu118" },
-    { extra = "cu128" },
-  ],
-]
-
 [tool.uv.sources]
-torch = [
-  { index = "pytorch-cu118", extra = "cu118"},
-  { index = "pytorch-cu128", extra = "cu128" },
-]
-torchvision = [
-  { index = "pytorch-cu118", extra = "cu118"},
-  { index = "pytorch-cu128", extra = "cu128" },
-]
-
-[[tool.uv.index]]
-name = "pytorch-cu118"
-url = "https://download.pytorch.org/whl/cu118"
-explicit = true
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+mobileclip = { git = "https://github.com/ultralytics/mobileclip.git" }
 
 [[tool.uv.index]]
 name = "pytorch-cu128"

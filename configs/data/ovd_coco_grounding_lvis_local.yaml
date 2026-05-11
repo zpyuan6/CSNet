@@ -1,0 +1,23 @@
+# Temporary mixed-data config to bypass Objects365 while keeping the
+# open-vocabulary training pipeline active.
+#
+# Train:
+# - COCO detection supervision
+# - Flickr30k grounding
+# - GQA grounding
+#
+# Val:
+# - LVIS open-vocabulary validation
+
+train:
+  yolo_data:
+    - configs/data/coco.yaml
+  grounding_data:
+    - img_path: C:/Datasets/flickr30k/flickr30k-images
+      json_file: C:/Datasets/flickr30k/final_flickr_separateGT_train.json
+    - img_path: C:/Datasets/GQA/images
+      json_file: C:/Datasets/GQA/final_mixed_train_no_coco.json
+
+val:
+  yolo_data:
+    - configs/data/lvis_local.yaml

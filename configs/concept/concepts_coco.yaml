@@ -1,0 +1,289 @@
+meta:
+  dataset: coco
+  version: v2
+  description: Compact hierarchical concept definitions for supervised audit.
+
+levels:
+  - id: L1
+    name: primitive
+    description: Low-level visual primitives.
+  - id: L2
+    name: local_structure
+    description: Local object parts or visible structures.
+  - id: L3
+    name: semantic_pattern
+    description: Discriminative object patterns.
+  - id: L4
+    name: class_concept
+    description: Final class concepts.
+
+level_concepts:
+  L1:
+    round_contour: pixel
+    rectangular_panel: pixel
+    elongated_contour: pixel
+    curved_edge: pixel
+    compact_blob: pixel
+    repeated_texture: pixel
+    stripe_pattern: pixel
+  L2:
+    wheel: pixel
+    vehicle_window: pixel
+    vehicle_body: instance
+    signal_light: pixel
+    sign_panel: instance
+    handle: pixel
+    human_head: instance
+    human_limb: instance
+    animal_head: instance
+    animal_limb: instance
+    wing: instance
+    container_mouth: pixel
+    screen_panel: pixel
+    keyboard_buttons: pixel
+    seat_surface: instance
+    table_top: instance
+    food_body: instance
+    utensil_tip: pixel
+    plant_leaf_cluster: instance
+    rigid_box_body: instance
+    soft_body: instance
+    small_handheld_body: instance
+  L3:
+    human_body: instance
+    wheeled_vehicle: instance
+    two_wheel_vehicle: instance
+    large_vehicle: instance
+    flying_or_floating_vehicle: instance
+    animal_body: instance
+    bird_body: instance
+    carried_bag: instance
+    sports_equipment: instance
+    drink_container: instance
+    tableware: instance
+    food_object: instance
+    seating_furniture: instance
+    table_furniture: instance
+    plant_container: instance
+    electronic_device: instance
+    kitchen_appliance: instance
+    bathroom_fixture: instance
+    book_like_object: instance
+    decorative_object: instance
+    grooming_tool: instance
+  L4:
+    person: instance
+    bicycle: instance
+    car: instance
+    motorcycle: instance
+    airplane: instance
+    bus: instance
+    train: instance
+    truck: instance
+    boat: instance
+    traffic_light: instance
+    fire_hydrant: instance
+    stop_sign: instance
+    parking_meter: instance
+    bench: instance
+    bird: instance
+    cat: instance
+    dog: instance
+    horse: instance
+    sheep: instance
+    cow: instance
+    elephant: instance
+    bear: instance
+    zebra: instance
+    giraffe: instance
+    backpack: instance
+    umbrella: instance
+    handbag: instance
+    tie: instance
+    suitcase: instance
+    frisbee: instance
+    skis: instance
+    snowboard: instance
+    sports_ball: instance
+    kite: instance
+    baseball_bat: instance
+    baseball_glove: instance
+    skateboard: instance
+    surfboard: instance
+    tennis_racket: instance
+    bottle: instance
+    wine_glass: instance
+    cup: instance
+    fork: instance
+    knife: instance
+    spoon: instance
+    bowl: instance
+    banana: instance
+    apple: instance
+    sandwich: instance
+    orange: instance
+    broccoli: instance
+    carrot: instance
+    hot_dog: instance
+    pizza: instance
+    donut: instance
+    cake: instance
+    chair: instance
+    couch: instance
+    potted_plant: instance
+    bed: instance
+    dining_table: instance
+    toilet: instance
+    tv: instance
+    laptop: instance
+    mouse: instance
+    remote: instance
+    keyboard: instance
+    cell_phone: instance
+    microwave: instance
+    oven: instance
+    toaster: instance
+    sink: instance
+    refrigerator: instance
+    book: instance
+    clock: instance
+    vase: instance
+    scissors: instance
+    teddy_bear: instance
+    hair_drier: instance
+    toothbrush: instance
+
+concepts:
+  - {id: round_contour, name: round contour, level: L1, description: A round or nearly round visible outline., children: []}
+  - {id: rectangular_panel, name: rectangular panel, level: L1, description: A roughly rectangular local face or panel., children: []}
+  - {id: elongated_contour, name: elongated contour, level: L1, description: A long narrow visible contour., children: []}
+  - {id: curved_edge, name: curved edge, level: L1, description: A smooth curved boundary fragment., children: []}
+  - {id: compact_blob, name: compact blob, level: L1, description: A compact localized visual region., children: []}
+  - {id: repeated_texture, name: repeated texture, level: L1, description: A repeated local pattern or texture., children: []}
+  - {id: stripe_pattern, name: stripe pattern, level: L1, description: A repeated stripe-like local pattern., children: []}
+
+  - {id: wheel, name: wheel, level: L2, description: A circular vehicle wheel or tire., children: [round_contour, curved_edge]}
+  - {id: vehicle_window, name: vehicle window, level: L2, description: A rectangular window on a vehicle body., children: [rectangular_panel, curved_edge]}
+  - {id: vehicle_body, name: vehicle body, level: L2, description: A rigid body shell of a transport object., children: [rectangular_panel, elongated_contour]}
+  - {id: signal_light, name: signal light, level: L2, description: A stacked or grouped light signal region., children: [round_contour, rectangular_panel]}
+  - {id: sign_panel, name: sign panel, level: L2, description: A flat sign-like panel region., children: [rectangular_panel, round_contour]}
+  - {id: handle, name: handle, level: L2, description: A graspable handle-like part., children: [curved_edge, elongated_contour]}
+  - {id: human_head, name: human head, level: L2, description: A visible human head region., children: [compact_blob, curved_edge]}
+  - {id: human_limb, name: human limb, level: L2, description: A visible arm or leg-like human body segment., children: [elongated_contour, curved_edge]}
+  - {id: animal_head, name: animal head, level: L2, description: A visible animal head region., children: [compact_blob, curved_edge]}
+  - {id: animal_limb, name: animal limb, level: L2, description: A visible animal leg or appendage., children: [elongated_contour, curved_edge]}
+  - {id: wing, name: wing, level: L2, description: A wing-like laterally extended region., children: [curved_edge, elongated_contour]}
+  - {id: container_mouth, name: container mouth, level: L2, description: An opening or rim of a container., children: [round_contour, curved_edge]}
+  - {id: screen_panel, name: screen panel, level: L2, description: A flat electronic display panel., children: [rectangular_panel]}
+  - {id: keyboard_buttons, name: keyboard buttons, level: L2, description: A repeated button or key region., children: [repeated_texture, rectangular_panel]}
+  - {id: seat_surface, name: seat surface, level: L2, description: A sitting or resting support surface., children: [rectangular_panel, curved_edge]}
+  - {id: table_top, name: table top, level: L2, description: A broad flat top support surface., children: [rectangular_panel]}
+  - {id: food_body, name: food body, level: L2, description: A compact visible food item body., children: [compact_blob, round_contour]}
+  - {id: utensil_tip, name: utensil tip, level: L2, description: A functional eating or cutting tool end., children: [elongated_contour, curved_edge]}
+  - {id: plant_leaf_cluster, name: plant leaf cluster, level: L2, description: A clustered leaf-like plant region., children: [curved_edge, repeated_texture]}
+  - {id: rigid_box_body, name: rigid box body, level: L2, description: A rigid box-like object body., children: [rectangular_panel]}
+  - {id: soft_body, name: soft body, level: L2, description: A soft rounded or padded object body., children: [compact_blob, curved_edge]}
+  - {id: small_handheld_body, name: small handheld body, level: L2, description: A compact object body held or operated by hand., children: [rectangular_panel, elongated_contour]}
+
+  - {id: human_body, name: human body, level: L3, description: A human body configuration with head and limbs., children: [human_head, human_limb]}
+  - {id: wheeled_vehicle, name: wheeled vehicle, level: L3, description: A vehicle body supported by wheels., children: [vehicle_body, wheel, vehicle_window]}
+  - {id: two_wheel_vehicle, name: two-wheel vehicle, level: L3, description: A narrow rideable vehicle with wheels and handle structure., children: [wheel, handle, vehicle_body]}
+  - {id: large_vehicle, name: large vehicle, level: L3, description: A large transport body with vehicle windows and rigid shell., children: [vehicle_body, vehicle_window, wheel]}
+  - {id: flying_or_floating_vehicle, name: flying or floating vehicle, level: L3, description: A rigid transport body with wing or hull-like structure., children: [vehicle_body, wing]}
+  - {id: animal_body, name: animal body, level: L3, description: A non-human animal body configuration., children: [animal_head, animal_limb, soft_body]}
+  - {id: bird_body, name: bird body, level: L3, description: A bird-like body configuration with wing structure., children: [animal_head, wing, soft_body]}
+  - {id: carried_bag, name: carried bag, level: L3, description: A portable bag-like object with body and handle., children: [rigid_box_body, handle]}
+  - {id: sports_equipment, name: sports equipment, level: L3, description: A sports object, board, racket, bat, glove, or ball structure., children: [rigid_box_body, handle, round_contour]}
+  - {id: drink_container, name: drink container, level: L3, description: A bottle, glass, cup, or bowl-like container structure., children: [container_mouth, rigid_box_body]}
+  - {id: tableware, name: tableware, level: L3, description: An eating utensil or small tableware object., children: [utensil_tip, elongated_contour]}
+  - {id: food_object, name: food object, level: L3, description: A compact edible object body., children: [food_body]}
+  - {id: seating_furniture, name: seating furniture, level: L3, description: A seat or padded furniture structure., children: [seat_surface, soft_body]}
+  - {id: table_furniture, name: table furniture, level: L3, description: A table-like furniture structure with a flat support top., children: [table_top]}
+  - {id: plant_container, name: plant container, level: L3, description: A potted plant structure with leaves and rigid container., children: [plant_leaf_cluster, rigid_box_body]}
+  - {id: electronic_device, name: electronic device, level: L3, description: An object dominated by a screen, buttons, or handheld electronics body., children: [screen_panel, keyboard_buttons, small_handheld_body]}
+  - {id: kitchen_appliance, name: kitchen appliance, level: L3, description: A rigid kitchen appliance with box-like body or door panel., children: [rigid_box_body, handle]}
+  - {id: bathroom_fixture, name: bathroom fixture, level: L3, description: A rigid bathroom fixture or sink-like object., children: [rigid_box_body, container_mouth]}
+  - {id: book_like_object, name: book-like object, level: L3, description: A flat reading object with rectangular body., children: [rectangular_panel]}
+  - {id: decorative_object, name: decorative object, level: L3, description: A clock, vase, or plush decorative object structure., children: [round_contour, container_mouth, soft_body]}
+  - {id: grooming_tool, name: grooming tool, level: L3, description: A handheld grooming tool structure., children: [small_handheld_body, handle]}
+
+  - {id: person, name: person, level: L4, description: Person class concept., children: [human_body]}
+  - {id: bicycle, name: bicycle, level: L4, description: Bicycle class concept., children: [two_wheel_vehicle]}
+  - {id: car, name: car, level: L4, description: Car class concept., children: [wheeled_vehicle]}
+  - {id: motorcycle, name: motorcycle, level: L4, description: Motorcycle class concept., children: [two_wheel_vehicle]}
+  - {id: airplane, name: airplane, level: L4, description: Airplane class concept., children: [flying_or_floating_vehicle]}
+  - {id: bus, name: bus, level: L4, description: Bus class concept., children: [large_vehicle]}
+  - {id: train, name: train, level: L4, description: Train class concept., children: [large_vehicle]}
+  - {id: truck, name: truck, level: L4, description: Truck class concept., children: [large_vehicle]}
+  - {id: boat, name: boat, level: L4, description: Boat class concept., children: [flying_or_floating_vehicle]}
+  - {id: traffic_light, name: traffic light, level: L4, description: Traffic light class concept., children: [signal_light]}
+  - {id: fire_hydrant, name: fire hydrant, level: L4, description: Fire hydrant class concept., children: [rigid_box_body]}
+  - {id: stop_sign, name: stop sign, level: L4, description: Stop sign class concept., children: [sign_panel]}
+  - {id: parking_meter, name: parking meter, level: L4, description: Parking meter class concept., children: [rigid_box_body]}
+  - {id: bench, name: bench, level: L4, description: Bench class concept., children: [seating_furniture]}
+  - {id: bird, name: bird, level: L4, description: Bird class concept., children: [bird_body]}
+  - {id: cat, name: cat, level: L4, description: Cat class concept., children: [animal_body]}
+  - {id: dog, name: dog, level: L4, description: Dog class concept., children: [animal_body]}
+  - {id: horse, name: horse, level: L4, description: Horse class concept., children: [animal_body]}
+  - {id: sheep, name: sheep, level: L4, description: Sheep class concept., children: [animal_body]}
+  - {id: cow, name: cow, level: L4, description: Cow class concept., children: [animal_body]}
+  - {id: elephant, name: elephant, level: L4, description: Elephant class concept., children: [animal_body]}
+  - {id: bear, name: bear, level: L4, description: Bear class concept., children: [animal_body]}
+  - {id: zebra, name: zebra, level: L4, description: Zebra class concept., children: [animal_body, stripe_pattern]}
+  - {id: giraffe, name: giraffe, level: L4, description: Giraffe class concept., children: [animal_body]}
+  - {id: backpack, name: backpack, level: L4, description: Backpack class concept., children: [carried_bag]}
+  - {id: umbrella, name: umbrella, level: L4, description: Umbrella class concept., children: [curved_edge, handle]}
+  - {id: handbag, name: handbag, level: L4, description: Handbag class concept., children: [carried_bag]}
+  - {id: tie, name: tie, level: L4, description: Tie class concept., children: [elongated_contour]}
+  - {id: suitcase, name: suitcase, level: L4, description: Suitcase class concept., children: [carried_bag]}
+  - {id: frisbee, name: frisbee, level: L4, description: Frisbee class concept., children: [round_contour]}
+  - {id: skis, name: skis, level: L4, description: Skis class concept., children: [sports_equipment]}
+  - {id: snowboard, name: snowboard, level: L4, description: Snowboard class concept., children: [sports_equipment]}
+  - {id: sports_ball, name: sports ball, level: L4, description: Sports ball class concept., children: [round_contour]}
+  - {id: kite, name: kite, level: L4, description: Kite class concept., children: [sign_panel]}
+  - {id: baseball_bat, name: baseball bat, level: L4, description: Baseball bat class concept., children: [elongated_contour]}
+  - {id: baseball_glove, name: baseball glove, level: L4, description: Baseball glove class concept., children: [soft_body]}
+  - {id: skateboard, name: skateboard, level: L4, description: Skateboard class concept., children: [sports_equipment, wheel]}
+  - {id: surfboard, name: surfboard, level: L4, description: Surfboard class concept., children: [sports_equipment]}
+  - {id: tennis_racket, name: tennis racket, level: L4, description: Tennis racket class concept., children: [sports_equipment]}
+  - {id: bottle, name: bottle, level: L4, description: Bottle class concept., children: [drink_container]}
+  - {id: wine_glass, name: wine glass, level: L4, description: Wine glass class concept., children: [drink_container]}
+  - {id: cup, name: cup, level: L4, description: Cup class concept., children: [drink_container]}
+  - {id: fork, name: fork, level: L4, description: Fork class concept., children: [tableware]}
+  - {id: knife, name: knife, level: L4, description: Knife class concept., children: [tableware]}
+  - {id: spoon, name: spoon, level: L4, description: Spoon class concept., children: [tableware]}
+  - {id: bowl, name: bowl, level: L4, description: Bowl class concept., children: [drink_container]}
+  - {id: banana, name: banana, level: L4, description: Banana class concept., children: [food_object]}
+  - {id: apple, name: apple, level: L4, description: Apple class concept., children: [food_object]}
+  - {id: sandwich, name: sandwich, level: L4, description: Sandwich class concept., children: [food_object]}
+  - {id: orange, name: orange, level: L4, description: Orange class concept., children: [food_object]}
+  - {id: broccoli, name: broccoli, level: L4, description: Broccoli class concept., children: [food_object]}
+  - {id: carrot, name: carrot, level: L4, description: Carrot class concept., children: [food_object]}
+  - {id: hot_dog, name: hot dog, level: L4, description: Hot dog class concept., children: [food_object]}
+  - {id: pizza, name: pizza, level: L4, description: Pizza class concept., children: [food_object]}
+  - {id: donut, name: donut, level: L4, description: Donut class concept., children: [food_object]}
+  - {id: cake, name: cake, level: L4, description: Cake class concept., children: [food_object]}
+  - {id: chair, name: chair, level: L4, description: Chair class concept., children: [seating_furniture]}
+  - {id: couch, name: couch, level: L4, description: Couch class concept., children: [seating_furniture]}
+  - {id: potted_plant, name: potted plant, level: L4, description: Potted plant class concept., children: [plant_container]}
+  - {id: bed, name: bed, level: L4, description: Bed class concept., children: [seating_furniture]}
+  - {id: dining_table, name: dining table, level: L4, description: Dining table class concept., children: [table_furniture]}
+  - {id: toilet, name: toilet, level: L4, description: Toilet class concept., children: [bathroom_fixture]}
+  - {id: tv, name: tv, level: L4, description: TV class concept., children: [electronic_device]}
+  - {id: laptop, name: laptop, level: L4, description: Laptop class concept., children: [electronic_device]}
+  - {id: mouse, name: mouse, level: L4, description: Mouse class concept., children: [small_handheld_body]}
+  - {id: remote, name: remote, level: L4, description: Remote class concept., children: [small_handheld_body, keyboard_buttons]}
+  - {id: keyboard, name: keyboard, level: L4, description: Keyboard class concept., children: [keyboard_buttons]}
+  - {id: cell_phone, name: cell phone, level: L4, description: Cell phone class concept., children: [electronic_device]}
+  - {id: microwave, name: microwave, level: L4, description: Microwave class concept., children: [kitchen_appliance]}
+  - {id: oven, name: oven, level: L4, description: Oven class concept., children: [kitchen_appliance]}
+  - {id: toaster, name: toaster, level: L4, description: Toaster class concept., children: [kitchen_appliance]}
+  - {id: sink, name: sink, level: L4, description: Sink class concept., children: [bathroom_fixture]}
+  - {id: refrigerator, name: refrigerator, level: L4, description: Refrigerator class concept., children: [kitchen_appliance]}
+  - {id: book, name: book, level: L4, description: Book class concept., children: [book_like_object]}
+  - {id: clock, name: clock, level: L4, description: Clock class concept., children: [decorative_object]}
+  - {id: vase, name: vase, level: L4, description: Vase class concept., children: [decorative_object]}
+  - {id: scissors, name: scissors, level: L4, description: Scissors class concept., children: [tableware]}
+  - {id: teddy_bear, name: teddy bear, level: L4, description: Teddy bear class concept., children: [soft_body, animal_body]}
+  - {id: hair_drier, name: hair drier, level: L4, description: Hair drier class concept., children: [grooming_tool]}
+  - {id: toothbrush, name: toothbrush, level: L4, description: Toothbrush class concept., children: [grooming_tool]}

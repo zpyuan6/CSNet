@@ -77,6 +77,8 @@ from modules import (
     CapsProj,
     CapsRoute,
     CapsRoutev2,
+    CapsRoutev3,
+    CapsRoutev4,
     CapsuleDetect,
     CapsuleDetectv1,
     CapsuleDetectv2,
@@ -84,8 +86,12 @@ from modules import (
     CapsuleDetectv5,
     CapsuleDetectv6,
     CapsuleDetectv7,
+    CapsuleDetectv8,
+    CapsuleOpenVocabDetect,
+    CapsuleOpenVocabDetectV2,
     CapsuleSegmentv1,
     CapsuleSegmentv2,
+    CapsuleSegmentv3,
     CapsuleTap,
     DeformableCapsBlock,
 )
@@ -100,12 +106,18 @@ CUSTOM_MODULES = {
     "CapsuleDetectv5": CapsuleDetectv5,
     "CapsuleDetectv6": CapsuleDetectv6,
     "CapsuleDetectv7": CapsuleDetectv7,
+    "CapsuleDetectv8": CapsuleDetectv8,
+    "CapsuleOpenVocabDetect": CapsuleOpenVocabDetect,
+    "CapsuleOpenVocabDetectV2": CapsuleOpenVocabDetectV2,
     "CapsuleSegmentv1": CapsuleSegmentv1,
     "CapsuleSegmentv2": CapsuleSegmentv2,
+    "CapsuleSegmentv3": CapsuleSegmentv3,
     "CapsProj": CapsProj,
     "CapsAlign": CapsAlign,
     "CapsRoute": CapsRoute,
     "CapsRoutev2": CapsRoutev2,
+    "CapsRoutev3": CapsRoutev3,
+    "CapsRoutev4": CapsRoutev4,
     "CapsDecode": CapsDecode,
     "CapsuleTap": CapsuleTap,
 }
@@ -204,8 +216,12 @@ def parse_model(d: dict[str, Any], ch: int, verbose: bool = True):
             CapsuleDetectv5,
             CapsuleDetectv6,
             CapsuleDetectv7,
+            CapsuleDetectv8,
+            CapsuleOpenVocabDetect,
+            CapsuleOpenVocabDetectV2,
             CapsuleSegmentv1,
             CapsuleSegmentv2,
+            CapsuleSegmentv3,
             WorldDetect,
             YOLOEDetect,
             Segment,
@@ -282,7 +298,7 @@ def parse_model(d: dict[str, Any], ch: int, verbose: bool = True):
             args = [c1, src_level, tgt_level, group_num]
             c2 = c1
 
-        elif m in {CapsRoute, CapsRoutev2}:
+        elif m in {CapsRoute, CapsRoutev2, CapsRoutev3, CapsRoutev4}:
             num_src = len(f) if isinstance(f, (list, tuple)) else 1
 
             # Preferred YAML args:
@@ -363,16 +379,35 @@ def parse_model(d: dict[str, Any], ch: int, verbose: bool = True):
         elif m is Concat:
             c2 = sum(ch[x] for x in f)
         elif m in detect_modules:
-            if m in {CapsuleDetect, CapsuleDetectv1, CapsuleDetectv2, CapsuleDetectv4, CapsuleDetectv5, CapsuleDetectv6, CapsuleDetectv7, CapsuleSegmentv1, CapsuleSegmentv2}:
+            if m in {
+                CapsuleDetect,
+                CapsuleDetectv1,
+                CapsuleDetectv2,
+                CapsuleDetectv4,
+                CapsuleDetectv5,
+                CapsuleDetectv6,
+                CapsuleDetectv7,
+                CapsuleDetectv8,
+                CapsuleOpenVocabDetect,
+                CapsuleOpenVocabDetectV2,
+                CapsuleSegmentv1,
+                CapsuleSegmentv2,
+                CapsuleSegmentv3,
+            }:
                 if len(args) < 3:
-                    raise ValueError('CapsuleDetect/CapsuleDetectv1/CapsuleDetectv2/CapsuleDetectv4/CapsuleDetectv5/CapsuleDetectv6/CapsuleDetectv7/CapsuleSegmentv1/CapsuleSegmentv2 args must include [nc, k_list, d_list].')
+                    raise ValueError('CapsuleDetect/CapsuleDetectv1/CapsuleDetectv2/CapsuleDetectv4/CapsuleDetectv5/CapsuleDetectv6/CapsuleDetectv7/CapsuleDetectv8/CapsuleOpenVocabDetect/CapsuleSegmentv1/CapsuleSegmentv2/CapsuleSegmentv3 args must include [nc, k_list, d_list].')
                 if not isinstance(args[1], (list, tuple)) or not isinstance(args[2], (list, tuple)):
-                    raise TypeError('CapsuleDetect/CapsuleDetectv1/CapsuleDetectv2/CapsuleDetectv4/CapsuleDetectv5/CapsuleDetectv6/CapsuleDetectv7/CapsuleSegmentv1/CapsuleSegmentv2 requires k_list and d_list in YAML.')
+                    raise TypeError('CapsuleDetect/CapsuleDetectv1/CapsuleDetectv2/CapsuleDetectv4/CapsuleDetectv5/CapsuleDetectv6/CapsuleDetectv7/CapsuleDetectv8/CapsuleOpenVocabDetect/CapsuleSegmentv1/CapsuleSegmentv2/CapsuleSegmentv3 requires k_list and d_list in YAML.')
                 # Width-scale capsule type counts per level; keep pose dims as provided.
                 args[1] = [max(int(round(int(v) * width)), 1) for v in args[1]]
                 args[2] = [int(v) for v in args[2]]
 
-            args.extend([reg_max, end2end, [ch[x] for x in f]])
+            if m in {CapsuleOpenVocabDetect, CapsuleOpenVocabDetectV2}:
+                # Keep YAML order aligned with the head API:
+                # [nc, k_list, d_list, embed, with_act_gate, with_objectness_prior]
+                args = [*args[:3], reg_max, end2end, *args[3:], [ch[x] for x in f]]
+            else:
+                args.extend([reg_max, end2end, [ch[x] for x in f]])
             if m in {Segment, Segment26, YOLOESegment, YOLOESegment26}:
                 args[2] = make_divisible(min(args[2], max_channels) * width, 8)
             if m in {
@@ -384,8 +419,12 @@ def parse_model(d: dict[str, Any], ch: int, verbose: bool = True):
                 CapsuleDetectv5,
                 CapsuleDetectv6,
                 CapsuleDetectv7,
+                CapsuleDetectv8,
+                CapsuleOpenVocabDetect,
+                CapsuleOpenVocabDetectV2,
                 CapsuleSegmentv1,
                 CapsuleSegmentv2,
+                CapsuleSegmentv3,
                 YOLOEDetect,
                 Segment,
                 Segment26,
@@ -422,7 +461,7 @@ def parse_model(d: dict[str, Any], ch: int, verbose: bool = True):
 
         m_ = nn.Sequential(*(m(*args) for _ in range(n))) if n > 1 else m(*args)
 
-        if m in {CapsRoute, CapsRoutev2}:
+        if m in {CapsRoute, CapsRoutev2, CapsRoutev3, CapsRoutev4}:
             c2 = int(getattr(m_, "c_out", c2))
 
         t = str(m)[8:-2].replace("__main__.", "")
